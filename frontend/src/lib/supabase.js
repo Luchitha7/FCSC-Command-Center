@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
-const url = import.meta.env.VITE_SUPABASE_URL
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const url = import.meta.env.sgkpvwrunlrhegohorcz
+const anonKey = import.meta.env.sb_publishable_ykoReR1rvoKhuH4gQ20fZA_BaI3VQfV
 
 if (!url || !anonKey) {
   throw new Error(
