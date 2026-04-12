@@ -1,0 +1,7 @@
+export default function Tasks() {
+  return (
+    <main className="p-6">
+      <h1 className="text-2xl font-semibold tracking-tight">Tasks Page</h1>
+    </main>
+  )
+}
