@@ -1,18 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Bell,
-  Calendar,
   Camera,
   ChevronRight,
-  ClipboardList,
   Download,
-  LayoutDashboard,
   Pencil,
-  PlusCircle,
   Settings,
   Shield,
-  ShieldCheck,
-  Users,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
@@ -23,16 +17,7 @@ import EditProfileModal from '../components/profile/EditProfileModal'
 import { supabase } from '../lib/supabase'
 import { displayNameFromUser, initialsFromDisplayName } from '../lib/userDisplay'
 import { useAuthProfile } from '../hooks/useAuthProfile'
-
-const navLinks = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-  { label: 'Events', icon: Calendar, path: '/events' },
-  { label: 'Tasks', icon: ClipboardList, path: '/tasks' },
-  { label: 'Calendar', icon: Calendar, path: '/calendar' },
-  { label: 'New Event', icon: PlusCircle, path: '/events' },
-  { label: 'Members', icon: Users, path: '/members' },
-  { label: 'Roles', icon: ShieldCheck, path: '/profile' },
-]
+import { getNavItems } from '../hooks/useNavItems'
 
 export default function Profile() {
   const navigate = useNavigate()
@@ -161,7 +146,7 @@ export default function Profile() {
 
   return (
     <>
-      <EcShell navItems={navLinks} footer={shellFooter} sidebarHeader={profileBrand}>
+      <EcShell navItems={getNavItems('profile')} footer={shellFooter} sidebarHeader={profileBrand}>
           {saveSuccess && (
             <div
               className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800"
