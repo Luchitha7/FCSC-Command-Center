@@ -12,10 +12,9 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react'
-import commandCenterLogo from '../assets/command-center-logo.png'
-
 import { useNavigate } from 'react-router-dom'
 import { format, formatDistanceToNow, isToday, isYesterday } from 'date-fns'
+import EcShell from '../components/layout/EcShell'
 import LogoutButton from '../components/LogoutButton'
 import { supabase } from '../lib/supabase'
 import { displayNameFromUser, initialsFromDisplayName, roleLabelFromUser } from '../lib/userDisplay'
@@ -28,7 +27,7 @@ const navLinks = [
   { label: 'Calendar', icon: Calendar, path: '/calendar' },
   { label: 'New Event', icon: PlusCircle },
   { label: 'Members', icon: Users, path: '/members' },
-  { label: 'Roles', icon: ShieldCheck },
+  { label: 'Roles', icon: ShieldCheck, path: '/profile' },
 ]
 
 const TYPE_BAR = {
@@ -240,70 +239,42 @@ export default function Dashboard() {
     { label: 'Growth', value: stats.completionPct, caption: 'Overall completion', accent: 'text-emerald-700' },
   ]
 
+  const shellFooter = (
+    <>
+      <button
+        type="button"
+        className="flex w-full touch-manipulation items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+      >
+        <Settings className="h-4 w-4 shrink-0" />
+        Settings
+      </button>
+      <div className="w-full">
+        <LogoutButton />
+      </div>
+    </>
+  )
+
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
-      <div className="mx-auto flex min-h-screen max-w-[1400px]">
-        <aside className="hidden w-64 flex-col border-r border-slate-200 bg-white p-5 lg:flex">
-          <div>
-            <img src={commandCenterLogo} alt="Command Center logo" className="h-10 w-auto" />
-            <p className="mt-1 text-xs font-semibold tracking-[0.2em] text-slate-400">Executive Committee</p>
-          </div>
-
-          <nav className="mt-8 space-y-1">
-            {navLinks.map((link) => {
-              const Icon = link.icon
-              return (
-                <button
-                  key={link.label}
-                  type="button"
-                  onClick={() => link.path && navigate(link.path)}
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
-                    link.active
-                      ? 'bg-indigo-50 text-indigo-700'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {link.label}
-                </button>
-              )
-            })}
-          </nav>
-
-          <div className="mt-auto space-y-1 border-t border-slate-200 pt-4">
-            <button
-              type="button"
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            >
-              <Settings className="h-4 w-4" />
-              Settings
-            </button>
-            <div className="w-full">
-              <LogoutButton />
-            </div>
-          </div>
-        </aside>
-
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">
-          <header className="flex items-center justify-between border-b border-slate-200 pb-4">
-            <div>
+    <EcShell navItems={navLinks} footer={shellFooter}>
+          <header className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Current View</p>
-              <h2 className="text-lg font-semibold text-slate-900">Dashboard Overview</h2>
+              <h2 className="text-lg font-semibold text-slate-900 sm:text-xl">Dashboard Overview</h2>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3">
+              <span className="hidden rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700 sm:inline-flex">
                 {roleLabel}
               </span>
               <button
                 type="button"
-                className="rounded-full border border-slate-200 bg-white p-2 text-slate-500 hover:text-slate-800"
+                className="touch-manipulation rounded-full border border-slate-200 bg-white p-2 text-slate-500 hover:text-slate-800"
               >
                 <Bell className="h-4 w-4" />
               </button>
               <button
                 type="button"
                 onClick={() => navigate('/profile')}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                className="grid h-9 w-9 shrink-0 touch-manipulation place-items-center rounded-full bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                 title={user?.email || displayName}
                 aria-label="Open profile"
               >
@@ -318,9 +289,10 @@ export default function Dashboard() {
             </p>
           )}
 
-          <section className="mt-7">
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-              Welcome back, {displayName} <span className="text-indigo-300">({roleLabel})</span>
+          <section className="mt-6 sm:mt-7">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">
+              <span className="block sm:inline">Welcome back, {displayName}</span>{' '}
+              <span className="text-lg text-indigo-300 sm:text-2xl lg:text-4xl">({roleLabel})</span>
             </h1>
             <p className="mt-2 text-base text-slate-600">
               The curated overview of your executive committee responsibilities for FCSC.
@@ -341,12 +313,12 @@ export default function Dashboard() {
 
           <section className="mt-8 grid gap-5 xl:grid-cols-3">
             <div className="space-y-4 xl:col-span-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-3xl font-bold tracking-tight text-slate-900">Upcoming Events</h3>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl lg:text-3xl">Upcoming Events</h3>
                 <button
                   type="button"
                   onClick={() => navigate('/events')}
-                  className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-700"
+                  className="touch-manipulation self-start text-xs font-bold uppercase tracking-[0.2em] text-indigo-700"
                 >
                   View all events
                 </button>
@@ -360,13 +332,15 @@ export default function Dashboard() {
                 )}
                 {!dashLoading &&
                   upcomingEvents.map((event) => (
-                    <article key={event.id} className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <article key={event.id} className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
                       <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.18em]">
                         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">{event.type}</span>
                         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">{event.status}</span>
                       </div>
 
-                      <h4 className="mt-5 text-3xl font-bold tracking-tight text-slate-900">{event.title}</h4>
+                      <h4 className="mt-4 text-xl font-bold tracking-tight text-slate-900 sm:mt-5 sm:text-2xl lg:text-3xl">
+                        {event.title}
+                      </h4>
                       <p className="mt-2 flex items-center gap-2 text-sm text-slate-500">
                         <Calendar className="h-4 w-4" />
                         {event.date}
@@ -387,8 +361,8 @@ export default function Dashboard() {
             </div>
 
             <div className="space-y-5">
-              <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                <h3 className="text-3xl font-bold tracking-tight text-slate-900">My Pending Tasks</h3>
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                <h3 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl lg:text-3xl">My Pending Tasks</h3>
                 <div className="mt-4 space-y-4">
                   {dashLoading && <p className="text-sm text-slate-500">Loading tasks…</p>}
                   {!dashLoading && pendingRows.length === 0 && (
@@ -412,8 +386,8 @@ export default function Dashboard() {
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                <h3 className="text-3xl font-bold tracking-tight text-slate-900">Recent Announcements</h3>
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                <h3 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl lg:text-3xl">Recent Announcements</h3>
                 <div className="mt-4 space-y-5">
                   {dashLoading && <p className="text-sm text-slate-500">Loading…</p>}
                   {!dashLoading && announcements.length === 0 && (
@@ -438,8 +412,6 @@ export default function Dashboard() {
               </section>
             </div>
           </section>
-        </main>
-      </div>
-    </div>
+    </EcShell>
   )
 }

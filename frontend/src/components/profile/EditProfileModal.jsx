@@ -70,13 +70,13 @@ export default function EditProfileModal({ isOpen, onClose, user, profile, onSav
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
       <div
-        className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl"
+        className="relative max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-slate-200 bg-white shadow-xl sm:max-h-[90vh] sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-labelledby="edit-profile-title"
@@ -96,7 +96,7 @@ export default function EditProfileModal({ isOpen, onClose, user, profile, onSav
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5 p-5">
+        <form onSubmit={handleSubmit} className="space-y-5 p-4 pb-6 sm:p-5 sm:pb-5">
           {error && (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
           )}
@@ -140,18 +140,18 @@ export default function EditProfileModal({ isOpen, onClose, user, profile, onSav
             </div>
           </div>
 
-          <div className="flex gap-3 border-t border-slate-100 pt-4">
+          <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="min-h-[44px] flex-1 touch-manipulation rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+              className="min-h-[44px] flex-1 touch-manipulation rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
             >
               {saving ? 'Saving…' : 'Save'}
             </button>

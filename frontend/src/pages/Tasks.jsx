@@ -103,20 +103,20 @@ export default function Tasks() {
   }
 
   return (
-    <main className="p-6">
+    <main className="mx-auto min-h-screen max-w-6xl overflow-x-hidden px-4 py-4 sm:px-6 sm:py-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight mb-4">Tasks</h1>
+        <h1 className="mb-4 text-xl font-semibold tracking-tight sm:text-2xl">Tasks</h1>
 
         {/* Select Event and Add Task Button */}
-        <div className="flex items-end gap-3 mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+        <div className="mb-6 flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 sm:flex-row sm:items-end sm:gap-3">
+          <div className="min-w-0 flex-1">
+            <label className="mb-2 block text-sm font-medium text-gray-700">
               Select Event to Create Task
             </label>
             <select
               value={selectedEventId}
               onChange={(e) => setSelectedEventId(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-full min-h-[44px] rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-transparent focus:ring-2 focus:ring-indigo-500 sm:px-4 sm:py-2"
             >
               <option value="">-- Choose an event --</option>
               {allEvents.map((event) => (
@@ -127,12 +127,13 @@ export default function Tasks() {
             </select>
           </div>
           <button
+            type="button"
             onClick={() => setShowAddForm(true)}
             disabled={!selectedEventId}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
+            className={`inline-flex touch-manipulation items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-medium transition sm:shrink-0 sm:py-2 ${
               selectedEventId
                 ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'cursor-not-allowed bg-gray-300 text-gray-500'
             }`}
           >
             <Plus size={20} />
@@ -141,9 +142,9 @@ export default function Tasks() {
         </div>
 
         {/* Info Banner */}
-        <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 p-4 rounded-lg">
-          <Info size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-blue-700">
+        <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 sm:p-4">
+          <Info size={20} className="mt-0.5 flex-shrink-0 text-blue-600" />
+          <p className="text-xs text-blue-700 sm:text-sm">
             <strong>Tip:</strong> Select an event from the dropdown above to create a new task, or open an event details page to manage tasks directly.
           </p>
         </div>
@@ -158,26 +159,26 @@ export default function Tasks() {
 
       {!loading && tasks.length > 0 && (
         <div className="grid gap-4">
-          <div className="rounded-lg border border-gray-200 overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+          <div className="-mx-1 overflow-x-auto rounded-lg border border-gray-200 sm:mx-0">
+            <table className="w-full min-w-[720px]">
+              <thead className="border-b border-gray-200 bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-900 sm:px-6 sm:py-3 sm:text-sm">
                     Task
                   </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-900 sm:px-6 sm:py-3 sm:text-sm">
                     Event
                   </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-900 sm:px-6 sm:py-3 sm:text-sm">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-900 sm:px-6 sm:py-3 sm:text-sm">
                     Priority
                   </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-900 sm:px-6 sm:py-3 sm:text-sm">
                     Due Date
                   </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-900 sm:px-6 sm:py-3 sm:text-sm">
                     Action
                   </th>
                 </tr>
@@ -186,48 +187,49 @@ export default function Tasks() {
                 {tasks.map((task) => (
                   <tr
                     key={task.id}
-                    className="hover:bg-gray-50 transition cursor-pointer"
+                    className="cursor-pointer transition hover:bg-gray-50 touch-manipulation"
                     onClick={() => setSelectedTask(task)}
                   >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
+                    <td className="px-3 py-3 sm:px-6 sm:py-4">
+                      <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                         {getStatusIcon(task.status)}
-                        <span className="font-medium text-gray-900">{task.title}</span>
+                        <span className="break-words font-medium text-gray-900">{task.title}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-3 py-3 text-xs text-gray-600 sm:px-6 sm:py-4 sm:text-sm">
                       {events[task.event_id] || 'Unknown'}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-3 sm:px-6 sm:py-4">
                       <span
-                        className={`inline-block px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(
+                        className={`inline-block rounded-full px-2 py-1 text-xs font-semibold sm:px-3 ${getStatusColor(
                           task.status
                         )}`}
                       >
                         {task.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-3 sm:px-6 sm:py-4">
                       <span
-                        className={`inline-block px-3 py-1 text-xs font-semibold rounded-full ${getPriorityColor(
+                        className={`inline-block rounded-full px-2 py-1 text-xs font-semibold sm:px-3 ${getPriorityColor(
                           task.priority
                         )}`}
                       >
                         {task.priority}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="whitespace-nowrap px-3 py-3 text-xs text-gray-600 sm:px-6 sm:py-4 sm:text-sm">
                       {task.due_date
                         ? new Date(task.due_date).toLocaleDateString()
                         : '—'}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-3 sm:px-6 sm:py-4">
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation()
                           setSelectedTask(task)
                         }}
-                        className="text-indigo-600 hover:text-indigo-700 font-medium text-sm"
+                        className="min-h-[44px] min-w-[44px] touch-manipulation px-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 sm:min-h-0 sm:min-w-0 sm:px-0"
                       >
                         Edit
                       </button>

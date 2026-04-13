@@ -17,6 +17,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
 import commandCenterLogo from '../assets/command-center-logo.png'
+import EcShell from '../components/layout/EcShell'
 import LogoutButton from '../components/LogoutButton'
 import EditProfileModal from '../components/profile/EditProfileModal'
 import { supabase } from '../lib/supabase'
@@ -133,50 +134,34 @@ export default function Profile() {
     setSaveSuccess(true)
   }
 
+  const profileBrand = (
+    <div className="flex items-center gap-3">
+      <img src={commandCenterLogo} alt="Command Center logo" className="h-9 w-auto shrink-0 sm:h-10" />
+      <div className="min-w-0">
+        <h1 className="truncate text-lg font-bold tracking-tight text-indigo-700 sm:text-2xl">Command Center</h1>
+        <p className="mt-1 text-[10px] font-semibold tracking-[0.2em] text-slate-400 sm:text-xs">Executive Committee</p>
+      </div>
+    </div>
+  )
+
+  const shellFooter = (
+    <>
+      <button
+        type="button"
+        className="flex w-full touch-manipulation items-center gap-3 rounded-lg bg-indigo-50 px-3 py-2.5 text-left text-sm font-medium text-indigo-700"
+      >
+        <Settings className="h-4 w-4 shrink-0" />
+        Settings
+      </button>
+      <div className="w-full">
+        <LogoutButton />
+      </div>
+    </>
+  )
+
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
-      <div className="mx-auto flex min-h-screen max-w-[1400px]">
-        <aside className="hidden w-64 flex-col border-r border-slate-200 bg-white p-5 lg:flex">
-          <div className="flex items-center gap-3">
-            <img src={commandCenterLogo} alt="Command Center logo" className="h-10 w-auto" />
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-indigo-700">Command Center</h1>
-              <p className="mt-1 text-xs font-semibold tracking-[0.2em] text-slate-400">Executive Committee</p>
-            </div>
-          </div>
-
-          <nav className="mt-8 space-y-1">
-            {navLinks.map((link) => {
-              const Icon = link.icon
-              return (
-                <button
-                  key={link.label}
-                  type="button"
-                  onClick={() => navigate(link.path)}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
-                >
-                  <Icon className="h-4 w-4" />
-                  {link.label}
-                </button>
-              )
-            })}
-          </nav>
-
-          <div className="mt-auto space-y-1 border-t border-slate-200 pt-4">
-            <button
-              type="button"
-              className="flex w-full items-center gap-3 rounded-lg bg-indigo-50 px-3 py-2 text-left text-sm font-medium text-indigo-700"
-            >
-              <Settings className="h-4 w-4" />
-              Settings
-            </button>
-            <div className="w-full">
-              <LogoutButton />
-            </div>
-          </div>
-        </aside>
-
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">
+    <>
+      <EcShell navItems={navLinks} footer={shellFooter} sidebarHeader={profileBrand}>
           {saveSuccess && (
             <div
               className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800"
@@ -186,12 +171,14 @@ export default function Profile() {
             </div>
           )}
 
-          <header className="flex items-center justify-between border-b border-slate-200 pb-4">
-            <h2 className="text-xl font-bold tracking-tight text-indigo-700">Profile Settings</h2>
-            <div className="flex items-center gap-3">
+          <header className="flex items-center justify-between gap-3 border-b border-slate-200 pb-4">
+            <h2 className="min-w-0 truncate text-lg font-bold tracking-tight text-indigo-700 sm:text-xl">
+              Profile Settings
+            </h2>
+            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
               <button
                 type="button"
-                className="rounded-full border border-slate-200 bg-white p-2 text-slate-500 hover:text-slate-800"
+                className="touch-manipulation rounded-full border border-slate-200 bg-white p-2 text-slate-500 hover:text-slate-800"
               >
                 <Bell className="h-4 w-4" />
               </button>
@@ -201,10 +188,10 @@ export default function Profile() {
             </div>
           </header>
 
-          <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-            <div className="flex flex-wrap items-center gap-5">
-              <div className="relative">
-                <div className="grid h-24 w-24 place-items-center rounded-2xl bg-indigo-700 text-4xl font-bold text-white">
+          <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 sm:mt-6 sm:p-6">
+            <div className="flex flex-col items-stretch gap-5 sm:flex-row sm:flex-wrap sm:items-center">
+              <div className="relative mx-auto sm:mx-0">
+                <div className="grid h-20 w-20 place-items-center rounded-2xl bg-indigo-700 text-3xl font-bold text-white sm:h-24 sm:w-24 sm:text-4xl">
                   {initials}
                 </div>
                 <button
@@ -216,20 +203,22 @@ export default function Profile() {
                 </button>
               </div>
 
-              <div className="min-w-[220px] flex-1">
-                <h1 className="text-4xl font-bold tracking-tight text-slate-900">{displayName}</h1>
-                <p className="mt-1 text-sm text-slate-500">{email}</p>
+              <div className="min-w-0 flex-1 text-center sm:text-left">
+                <h1 className="break-words text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">
+                  {displayName}
+                </h1>
+                <p className="mt-1 break-all text-sm text-slate-500">{email}</p>
               </div>
 
-              <div className="flex gap-3">
-                <article className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
-                  <p className="text-3xl font-bold text-indigo-700">
+              <div className="flex w-full justify-center gap-3 sm:w-auto sm:justify-start">
+                <article className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 p-3 text-center sm:flex-none sm:p-4">
+                  <p className="text-2xl font-bold text-indigo-700 sm:text-3xl">
                     {loading ? '…' : hostedCount ?? '—'}
                   </p>
                   <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Events Hosted</p>
                 </article>
-                <article className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
-                  <p className="text-3xl font-bold text-rose-700">
+                <article className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 p-3 text-center sm:flex-none sm:p-4">
+                  <p className="text-2xl font-bold text-rose-700 sm:text-3xl">
                     {loading ? '…' : taskRate != null ? `${taskRate}%` : '—'}
                   </p>
                   <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Task Rate</p>
@@ -240,13 +229,15 @@ export default function Profile() {
 
           <section className="mt-6 grid gap-5 xl:grid-cols-3">
             <div className="space-y-5 xl:col-span-2">
-              <article className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-                <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                  <h3 className="text-3xl font-bold tracking-tight text-slate-900">Personal Information</h3>
+              <article className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6">
+                <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                  <h3 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl lg:text-3xl">
+                    Personal Information
+                  </h3>
                   <button
                     type="button"
                     onClick={() => setEditOpen(true)}
-                    className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-white transition hover:bg-indigo-700"
+                    className="inline-flex w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-white transition hover:bg-indigo-700 sm:w-auto"
                   >
                     <Pencil className="h-4 w-4" />
                     Edit profile
@@ -284,8 +275,8 @@ export default function Profile() {
                 </div>
               </article>
 
-              <article className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-                <h3 className="flex items-center gap-2 text-3xl font-bold tracking-tight text-slate-900">
+              <article className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6">
+                <h3 className="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl lg:text-3xl">
                   <Shield className="h-5 w-5 text-rose-700" />
                   Security & Access
                 </h3>
@@ -301,8 +292,8 @@ export default function Profile() {
               </article>
 
               <article>
-                <div className="mb-4 flex items-center justify-between">
-                  <h3 className="text-3xl font-bold tracking-tight text-slate-900">Organizing Events</h3>
+                <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl lg:text-3xl">Organizing Events</h3>
                   <button
                     type="button"
                     onClick={() => navigate('/events')}
@@ -331,7 +322,9 @@ export default function Profile() {
                           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-600">
                             {event.type || 'Event'}
                           </p>
-                          <h4 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">{event.name}</h4>
+                          <h4 className="mt-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl lg:text-3xl">
+                            {event.name}
+                          </h4>
                           <p className="mt-1 text-sm text-slate-500">
                             {event.venue || '—'} • {dateStr}
                           </p>
@@ -347,7 +340,7 @@ export default function Profile() {
             </div>
 
             <div className="space-y-5">
-              <article className="rounded-2xl border border-slate-200 bg-white p-5">
+              <article className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
                 <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Task Efficiency</h3>
                 <div className="mt-4 grid place-items-center">
                   <div className="relative grid h-42 w-42 place-items-center rounded-full border-[10px] border-indigo-700 border-l-slate-200 border-b-slate-200">
@@ -377,8 +370,8 @@ export default function Profile() {
                 </div>
               </article>
 
-              <article className="rounded-2xl bg-indigo-700 p-5 text-white">
-                <h3 className="text-3xl font-bold tracking-tight">Export Records</h3>
+              <article className="rounded-2xl bg-indigo-700 p-4 text-white sm:p-5">
+                <h3 className="text-xl font-bold tracking-tight sm:text-2xl lg:text-3xl">Export Records</h3>
                 <p className="mt-2 text-sm text-indigo-100">
                   Generate a comprehensive report of your event participation and EC task history for your portfolio.
                 </p>
@@ -418,8 +411,7 @@ export default function Profile() {
               </article>
             </div>
           </section>
-        </main>
-      </div>
+      </EcShell>
 
       <EditProfileModal
         isOpen={editOpen}
@@ -428,6 +420,6 @@ export default function Profile() {
         profile={profile}
         onSaved={handleProfileSaved}
       />
-    </div>
+    </>
   )
 }

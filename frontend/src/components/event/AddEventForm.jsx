@@ -79,21 +79,23 @@ export default function AddEventForm({ onClose, onEventAdded }) {
   const eventStatuses = ['Planning', 'ACTIVE', 'COMPLETED', 'CANCELLED']
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-screen overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
+      <div className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-t-xl border border-gray-200 bg-white shadow-lg sm:max-h-[90vh] sm:rounded-xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 p-6">
-          <h2 className="text-2xl font-semibold text-gray-900">Create New Event</h2>
+        <div className="flex items-center justify-between border-b border-gray-200 p-4 sm:p-6">
+          <h2 className="text-lg font-semibold text-gray-900 sm:text-2xl">Create New Event</h2>
           <button
+            type="button"
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
+            className="touch-manipulation rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+            aria-label="Close"
           >
             <X size={24} />
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 p-4 pb-6 sm:p-6 sm:pb-6">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
               {error}
@@ -199,18 +201,18 @@ export default function AddEventForm({ onClose, onEventAdded }) {
           </div>
 
           {/* Buttons */}
-          <div className="flex gap-3 pt-4 border-t border-gray-200">
+          <div className="flex flex-col-reverse gap-2 border-t border-gray-200 pt-4 sm:flex-row sm:gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition"
+              className="min-h-[44px] w-full touch-manipulation rounded-lg border border-gray-300 px-4 py-2.5 font-medium text-gray-700 transition hover:bg-gray-50 sm:flex-1 sm:py-2"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition disabled:opacity-50"
+              className="min-h-[44px] w-full touch-manipulation rounded-lg bg-indigo-600 px-4 py-2.5 font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50 sm:flex-1 sm:py-2"
             >
               {loading ? 'Creating...' : 'Create Event'}
             </button>

@@ -168,7 +168,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
 
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="min-h-screen overflow-x-hidden p-4 sm:p-6">
         <p className="text-gray-600">Loading event...</p>
       </div>
     )
@@ -176,9 +176,13 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
 
   if (error || !eventData) {
     return (
-      <div className="p-6">
+      <div className="min-h-screen overflow-x-hidden p-4 sm:p-6">
         <p className="text-red-600">Error: {error || 'Event not found'}</p>
-        <button onClick={handleBack} className="text-indigo-600 mt-4 hover:text-indigo-700">
+        <button
+          type="button"
+          onClick={handleBack}
+          className="mt-4 touch-manipulation text-indigo-600 hover:text-indigo-700"
+        >
           ← Go back
         </button>
       </div>
@@ -203,51 +207,55 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
   const rsvpTarget = eventData.rsvp_target ?? eventData.expected_attendees ?? eventData.capacity
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="relative h-64 bg-gradient-to-r from-purple-600 to-purple-800 overflow-hidden">
+    <div className="min-h-screen overflow-x-hidden bg-gray-50">
+      <div className="relative min-h-[14rem] bg-gradient-to-r from-purple-600 to-purple-800 pb-8 sm:h-64 sm:pb-0">
         <button
+          type="button"
           onClick={handleBack}
-          className="absolute top-4 left-4 z-10 flex items-center gap-2 text-white hover:bg-white/20 px-3 py-2 rounded-lg transition"
+          className="absolute left-3 top-3 z-10 flex touch-manipulation items-center gap-2 rounded-lg px-3 py-2 text-sm text-white transition hover:bg-white/20 sm:left-4 sm:top-4"
         >
           <ChevronLeft size={20} />
           Back
         </button>
 
         <div className="absolute inset-0 opacity-30">
-          <div className="absolute top-10 right-20 w-32 h-32 bg-purple-500 rounded-full blur-3xl"></div>
-          <div className="absolute bottom-10 left-10 w-40 h-40 bg-purple-700 rounded-full blur-3xl"></div>
+          <div className="absolute right-10 top-10 h-24 w-24 rounded-full bg-purple-500 blur-3xl sm:right-20 sm:h-32 sm:w-32"></div>
+          <div className="absolute bottom-6 left-4 h-28 w-28 rounded-full bg-purple-700 blur-3xl sm:bottom-10 sm:left-10 sm:h-40 sm:w-40"></div>
         </div>
 
-        <div className="relative pt-24 px-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex gap-2 mb-4">
-                <span className="inline-block px-3 py-1 bg-purple-500 text-white text-xs font-semibold rounded-full">
+        <div className="relative px-4 pb-6 pt-16 sm:px-6 sm:pt-24">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <div className="mb-3 flex flex-wrap gap-2 sm:mb-4">
+                <span className="inline-block rounded-full bg-purple-500 px-2.5 py-1 text-xs font-semibold text-white sm:px-3">
                   {eventData.type}
                 </span>
-                <span className="inline-block px-3 py-1 bg-green-500 text-white text-xs font-semibold rounded-full">
+                <span className="inline-block rounded-full bg-green-500 px-2.5 py-1 text-xs font-semibold text-white sm:px-3">
                   {eventData.status}
                 </span>
               </div>
-              <h1 className="text-4xl font-bold text-white mb-4">{eventData.name}</h1>
-              <div className="flex flex-wrap items-center gap-6 text-white">
-                <div className="flex items-center gap-2">
-                  <Calendar size={18} />
-                  <span>{eventDate}</span>
+              <h1 className="mb-3 break-words text-2xl font-bold text-white sm:mb-4 sm:text-3xl lg:text-4xl">
+                {eventData.name}
+              </h1>
+              <div className="flex flex-col gap-3 text-sm text-white sm:flex-row sm:flex-wrap sm:items-center sm:gap-6 sm:text-base">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Calendar className="shrink-0" size={18} />
+                  <span className="break-words">{eventDate}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <MapPin size={18} />
-                  <span>{eventData.venue}</span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <MapPin className="shrink-0" size={18} />
+                  <span className="break-words">{eventData.venue}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Users size={18} />
+                <div className="flex min-w-0 items-center gap-2">
+                  <Users className="shrink-0" size={18} />
                   <span>{memberLabel}</span>
                 </div>
               </div>
             </div>
             <button
+              type="button"
               onClick={() => setShowEditForm(true)}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-semibold transition"
+              className="w-full touch-manipulation rounded-lg bg-indigo-600 px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-indigo-700 sm:w-auto sm:self-start sm:px-6"
             >
               Manage Event
             </button>
@@ -255,8 +263,8 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="mb-8 bg-white p-6 rounded-lg shadow-sm">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        <div className="mb-6 rounded-lg bg-white p-4 shadow-sm sm:mb-8 sm:p-6">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold text-gray-700">OVERALL READINESS</h3>
             <span className="text-lg font-bold text-indigo-600">{readiness}%</span>
@@ -287,19 +295,19 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-8">
+        <div className="grid grid-cols-1 gap-6 sm:gap-8 lg:grid-cols-3">
+          <div className="space-y-6 sm:space-y-8 lg:col-span-2">
             {activeTab === 'overview' && (
               <>
-                <div className="bg-white p-6 rounded-lg shadow-sm">
-                  <h2 className="text-xl font-semibold mb-4 text-gray-900">Event Description</h2>
+                <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                  <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Event Description</h2>
                   <p className="text-gray-600 leading-relaxed whitespace-pre-wrap">
                     {eventData.description || 'No description provided.'}
                   </p>
                 </div>
 
-                <div className="bg-white p-6 rounded-lg shadow-sm">
-                  <h2 className="text-xl font-semibold mb-6 text-gray-900">Milestone Timeline</h2>
+                <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                  <h2 className="mb-4 text-lg font-semibold text-gray-900 sm:mb-6 sm:text-xl">Milestone Timeline</h2>
                   {extrasLoading && <p className="text-gray-600 text-sm">Loading milestones…</p>}
                   {!extrasLoading && milestones.length === 0 && (
                     <p className="text-gray-600 text-sm">No milestones for this event yet.</p>
@@ -336,12 +344,13 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
             )}
 
             {activeTab === 'tasks' && (
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-semibold text-gray-900">Tasks</h2>
+              <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h2 className="text-lg font-semibold text-gray-900 sm:text-xl">Tasks</h2>
                   <button
+                    type="button"
                     onClick={() => setShowAddTaskForm(true)}
-                    className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 transition"
+                    className="inline-flex touch-manipulation items-center justify-center gap-2 rounded bg-indigo-600 px-3 py-2 text-sm text-white transition hover:bg-indigo-700 sm:py-1"
                   >
                     <Plus size={16} />
                     Add Task
@@ -403,8 +412,8 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
             )}
 
             {activeTab === 'members' && (
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h2 className="text-xl font-semibold mb-4 text-gray-900">Members</h2>
+              <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Members</h2>
                 {extrasLoading && <p className="text-gray-600">Loading…</p>}
                 {!extrasLoading && organizers.length === 0 && (
                   <p className="text-gray-600">No members assigned to this event yet.</p>
@@ -434,15 +443,15 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
             )}
 
             {activeTab === 'files' && (
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h2 className="text-xl font-semibold mb-4 text-gray-900">Files</h2>
+              <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Files</h2>
                 <p className="text-gray-600">File attachments are not configured in this build.</p>
               </div>
             )}
 
             {activeTab === 'announcements' && (
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h2 className="text-xl font-semibold mb-4 text-gray-900">Announcements</h2>
+              <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Announcements</h2>
                 {extrasLoading && <p className="text-gray-600">Loading…</p>}
                 {!extrasLoading && announcementsList.length === 0 && (
                   <p className="text-gray-600">No announcements for this event.</p>
@@ -466,9 +475,9 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
             )}
           </div>
 
-          <div className="space-y-6">
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <h3 className="text-lg font-semibold mb-4 text-gray-900">Organizers</h3>
+          <div className="space-y-6 lg:space-y-6">
+            <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+              <h3 className="mb-3 text-base font-semibold text-gray-900 sm:mb-4 sm:text-lg">Organizers</h3>
               {extrasLoading && <p className="text-gray-600 text-sm">Loading…</p>}
               {!extrasLoading && organizers.length === 0 && (
                 <p className="text-gray-600 text-sm">No organizers listed.</p>

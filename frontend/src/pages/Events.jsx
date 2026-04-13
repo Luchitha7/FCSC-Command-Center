@@ -43,12 +43,13 @@ export default function Events() {
   }
 
   return (
-    <main className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Events</h1>
+    <main className="mx-auto min-h-screen max-w-4xl overflow-x-hidden px-4 py-4 sm:px-6 sm:py-6">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Events</h1>
         <button
+          type="button"
           onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition font-medium"
+          className="inline-flex touch-manipulation items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 font-medium text-white transition hover:bg-indigo-700 sm:py-2"
         >
           <Plus size={20} />
           Add Event
@@ -67,11 +68,12 @@ export default function Events() {
           {events.map((event) => (
             <button
               key={event.id}
+              type="button"
               onClick={() => handleEventClick(event.id)}
-              className="bg-white p-4 rounded-lg shadow-sm hover:shadow-md transition cursor-pointer w-full text-left"
+              className="w-full cursor-pointer rounded-lg bg-white p-4 text-left shadow-sm transition hover:shadow-md touch-manipulation"
             >
-              <h3 className="font-semibold text-gray-900">{event.name}</h3>
-              <p className="text-sm text-gray-600">
+              <h3 className="break-words font-semibold text-gray-900">{event.name}</h3>
+              <p className="mt-1 break-words text-sm text-gray-600">
                 {new Date(event.date).toLocaleDateString()} • {event.venue}
               </p>
               <div className="mt-2 flex gap-2">
