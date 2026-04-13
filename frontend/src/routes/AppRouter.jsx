@@ -12,8 +12,7 @@ import Tasks from '../pages/Tasks.jsx'
 export default function AppRouter() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={<Login />} />
       
       {/* Protected Routes */}
       <Route
