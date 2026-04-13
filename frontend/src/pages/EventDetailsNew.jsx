@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, Calendar, MapPin, Users } from 'lucide-react'
+import { ChevronLeft, Calendar, MapPin, Users, CheckCircle, Clock, AlertCircle, Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import EditEventForm from '../components/event/EditEventForm'
+import AddTaskForm from '../components/task/AddTaskForm'
+import EditTaskForm from '../components/task/EditTaskForm'
 
 // Mock data for organizers, milestones (until we create separate tables)
 const mockOrganizers = [
@@ -59,12 +62,17 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
   const [eventData, setEventData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [showEditForm, setShowEditForm] = useState(false)
+  const [tasks, setTasks] = useState([])
+  const [showAddTaskForm, setShowAddTaskForm] = useState(false)
+  const [selectedTask, setSelectedTask] = useState(null)
 
   const eventId = propEventId || paramEventId
 
   useEffect(() => {
     if (eventId) {
       fetchEventData()
+      fetchEventTasks()
     }
   }, [eventId])
 
@@ -84,6 +92,21 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
       console.error('Error fetching event:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchEventTasks = async () => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('event_id', eventId)
+        .order('due_date', { ascending: true, nullsFirst: false })
+
+      if (fetchError) throw fetchError
+      setTasks(data || [])
+    } catch (err) {
+      console.error('Error fetching tasks:', err)
     }
   }
 
@@ -167,7 +190,9 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
                 </div>
               </div>
             </div>
-            <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-semibold transition">
+            <button 
+              onClick={() => setShowEditForm(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-semibold transition">
               Manage Event
             </button>
           </div>
@@ -250,8 +275,74 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
 
             {activeTab === 'tasks' && (
               <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h2 className="text-xl font-semibold mb-4 text-gray-900">Tasks</h2>
-                <p className="text-gray-600">Tasks will be displayed here</p>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold text-gray-900">Tasks</h2>
+                  <button
+                    onClick={() => setShowAddTaskForm(true)}
+                    className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 transition"
+                  >
+                    <Plus size={16} />
+                    Add Task
+                  </button>
+                </div>
+
+                {tasks.length === 0 ? (
+                  <p className="text-gray-600">No tasks yet. Create one to get started!</p>
+                ) : (
+                  <div className="space-y-3">
+                    {tasks.map((task) => (
+                      <div
+                        key={task.id}
+                        onClick={() => setSelectedTask(task)}
+                        className="flex items-start gap-4 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition"
+                      >
+                        <button onClick={() => setSelectedTask(task)} className="mt-1">
+                          {task.status === 'Completed' && (
+                            <CheckCircle className="text-green-500" size={20} />
+                          )}
+                          {task.status === 'In Progress' && (
+                            <Clock className="text-blue-500" size={20} />
+                          )}
+                          {task.status === 'Not Started' && (
+                            <AlertCircle className="text-gray-400" size={20} />
+                          )}
+                        </button>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900">{task.title}</h3>
+                          <div className="flex items-center gap-2 mt-2">
+                            <span
+                              className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                                task.priority === 'High'
+                                  ? 'bg-red-100 text-red-700'
+                                  : task.priority === 'Medium'
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : 'bg-green-100 text-green-700'
+                              }`}
+                            >
+                              {task.priority}
+                            </span>
+                            <span
+                              className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                                task.status === 'Completed'
+                                  ? 'bg-green-100 text-green-700'
+                                  : task.status === 'In Progress'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-gray-100 text-gray-700'
+                              }`}
+                            >
+                              {task.status}
+                            </span>
+                            {task.due_date && (
+                              <span className="text-xs text-gray-600">
+                                Due: {new Date(task.due_date).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -317,6 +408,39 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
               </div>
             </div>
           </div>
+
+      {showEditForm && (
+        <EditEventForm
+          event={eventData}
+          onClose={() => setShowEditForm(false)}
+          onEventUpdated={() => {
+            fetchEventData()
+            setShowEditForm(false)
+          }}
+        />
+      )}
+
+      {showAddTaskForm && (
+        <AddTaskForm
+          eventId={eventId}
+          onClose={() => setShowAddTaskForm(false)}
+          onTaskAdded={() => {
+            fetchEventTasks()
+            setShowAddTaskForm(false)
+          }}
+        />
+      )}
+
+      {selectedTask && (
+        <EditTaskForm
+          task={selectedTask}
+          onClose={() => setSelectedTask(null)}
+          onTaskUpdated={() => {
+            fetchEventTasks()
+            setSelectedTask(null)
+          }}
+        />
+      )}
         </div>
       </div>
     </div>
