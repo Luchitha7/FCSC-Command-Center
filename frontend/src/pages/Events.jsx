@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import AddEventForm from '../components/AddEventForm'
+import AddEventForm from '../components/event/AddEventForm'
 
 export default function Events() {
   const [events, setEvents] = useState([])
