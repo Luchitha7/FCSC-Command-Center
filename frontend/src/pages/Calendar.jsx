@@ -1,15 +1,7 @@
 import {
   Bell,
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
-  LayoutDashboard,
-  LogOut,
-  PlusCircle,
-  Settings,
-  ShieldCheck,
-  Users,
 } from 'lucide-react'
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -17,19 +9,11 @@ import { DayPicker } from 'react-day-picker'
 import { addDays, addMonths, endOfWeek, format, isToday, startOfWeek, subMonths } from 'date-fns'
 import { supabase } from '../lib/supabase'
 import EcShell from '../components/layout/EcShell'
+import LogoutButton from '../components/LogoutButton'
 import { displayNameFromUser, initialsFromDisplayName, roleLabelFromUser } from '../lib/userDisplay'
 import { useAuthProfile } from '../hooks/useAuthProfile'
+import { getNavItems } from '../hooks/useNavItems'
 import 'react-day-picker/style.css'
-
-const navLinks = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-  { label: 'Events', icon: CalendarDays, path: '/events' },
-  { label: 'Tasks', icon: ClipboardList, path: '/tasks' },
-  { label: 'Calendar', icon: CalendarDays, path: '/calendar', active: true },
-  { label: 'New Event', icon: PlusCircle, path: '/events' },
-  { label: 'Members', icon: Users, path: '/members' },
-  { label: 'Roles', icon: ShieldCheck, path: '/profile' },
-]
 
 export default function Calendar() {
   const navigate = useNavigate()
@@ -131,28 +115,10 @@ export default function Calendar() {
     }
   }
 
-  const shellFooter = (
-    <>
-      <button
-        type="button"
-        className="flex w-full touch-manipulation items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-      >
-        <Settings className="h-4 w-4 shrink-0" />
-        Settings
-      </button>
-      <button
-        type="button"
-        onClick={handleLogout}
-        className="flex w-full touch-manipulation items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 hover:bg-red-50"
-      >
-        <LogOut className="h-4 w-4 shrink-0" />
-        Logout
-      </button>
-    </>
-  )
+  const shellFooter = <LogoutButton />
 
   return (
-    <EcShell navItems={navLinks} footer={shellFooter}>
+    <EcShell navItems={getNavItems('calendar')} footer={shellFooter}>
           <header className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Current View</p>
