@@ -13,13 +13,15 @@ import {
   Users,
 } from 'lucide-react'
 
+import { useNavigate } from 'react-router-dom'
+
 const navLinks = [
   { label: 'Dashboard', icon: LayoutDashboard, active: true },
-  { label: 'Events', icon: Calendar },
-  { label: 'Tasks', icon: ClipboardList },
-  { label: 'Calendar', icon: Calendar },
+  { label: 'Events', icon: Calendar, path: "/events" },
+  { label: 'Tasks', icon: ClipboardList, path: "/tasks" },
+  { label: 'Calendar', icon: Calendar, path: "/calendar" },
   { label: 'New Event', icon: PlusCircle },
-  { label: 'Members', icon: Users },
+  { label: 'Members', icon: Users, path: "/members" },
   { label: 'Roles', icon: ShieldCheck },
 ]
 
@@ -85,6 +87,9 @@ const announcements = [
 ]
 
 export default function Dashboard() {
+
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
       <div className="mx-auto flex min-h-screen max-w-[1400px]">
@@ -101,6 +106,7 @@ export default function Dashboard() {
                 <button
                   key={link.label}
                   type="button"
+                  onClick={() => navigate(link.path)}
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
                     link.active
                       ? 'bg-indigo-50 text-indigo-700'
