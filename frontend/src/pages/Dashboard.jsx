@@ -15,145 +15,230 @@ import {
 import commandCenterLogo from '../assets/command-center-logo.png'
 
 import { useNavigate } from 'react-router-dom'
+import { format, formatDistanceToNow, isToday, isYesterday } from 'date-fns'
 import LogoutButton from '../components/LogoutButton'
 import { supabase } from '../lib/supabase'
-
-function displayNameFromUser(user) {
-  if (!user) return 'Member'
-  const meta = user.user_metadata || {}
-  const raw =
-    meta.full_name ||
-    meta.name ||
-    meta.display_name ||
-    meta.preferred_username
-  if (raw && String(raw).trim()) return String(raw).trim()
-  if (user.email) {
-    const local = user.email.split('@')[0]
-    return local
-      .replace(/[._-]+/g, ' ')
-      .replace(/\b\w/g, (c) => c.toUpperCase())
-  }
-  return 'Member'
-}
-
-function initialsFromDisplayName(displayName) {
-  if (!displayName || displayName === 'Member') return '?'
-  const parts = displayName.trim().split(/\s+/).filter(Boolean)
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-  }
-  if (displayName.length >= 2) return displayName.slice(0, 2).toUpperCase()
-  return displayName[0].toUpperCase()
-}
-
-function roleLabelFromUser(user) {
-  const meta = user?.user_metadata || {}
-  return meta.role || meta.title || 'EC Member'
-}
+import { displayNameFromUser, initialsFromDisplayName, roleLabelFromUser } from '../lib/userDisplay'
+import { useAuthProfile } from '../hooks/useAuthProfile'
 
 const navLinks = [
   { label: 'Dashboard', icon: LayoutDashboard, active: true },
-  { label: 'Events', icon: Calendar, path: "/events" },
-  { label: 'Tasks', icon: ClipboardList, path: "/tasks" },
-  { label: 'Calendar', icon: Calendar, path: "/calendar" },
+  { label: 'Events', icon: Calendar, path: '/events' },
+  { label: 'Tasks', icon: ClipboardList, path: '/tasks' },
+  { label: 'Calendar', icon: Calendar, path: '/calendar' },
   { label: 'New Event', icon: PlusCircle },
-  { label: 'Members', icon: Users, path: "/members" },
+  { label: 'Members', icon: Users, path: '/members' },
   { label: 'Roles', icon: ShieldCheck },
 ]
 
-const statCards = [
-  { label: 'Total', value: '12', caption: 'Events tracked', accent: 'text-indigo-700' },
-  { label: 'Active', value: '78', caption: 'Members engaged', accent: 'text-purple-700' },
-  { label: 'Pending', value: '24', caption: 'Open tasks', accent: 'text-rose-700' },
-  { label: 'Growth', value: '65%', caption: 'Overall completion', accent: 'text-emerald-700' },
-]
+const TYPE_BAR = {
+  MUSICAL: 'bg-pink-500',
+  CULTURAL: 'bg-amber-500',
+  SPORTS: 'bg-emerald-500',
+  ACADEMIC: 'bg-indigo-600',
+  TECHNICAL: 'bg-violet-500',
+  OTHER: 'bg-slate-500',
+}
 
-const events = [
-  {
-    type: 'Musical',
-    status: 'Active',
-    title: 'Musical Night 2026',
-    date: 'May 15, 2026',
-    progress: 72,
-    color: 'bg-pink-500',
-  },
-  {
-    type: 'Cultural',
-    status: 'Planning',
-    title: 'Aurudu Uthsawaya',
-    date: 'Apr 25, 2026',
-    progress: 45,
-    color: 'bg-amber-500',
-  },
-  {
-    type: 'Sports',
-    status: 'Planning',
-    title: 'Cricket Tournament',
-    date: 'Jun 3, 2026',
-    progress: 20,
-    color: 'bg-emerald-500',
-  },
-  {
-    type: 'Academic',
-    status: 'Active',
-    title: 'Study Support Sessions',
-    date: 'Ongoing',
-    progress: 90,
-    color: 'bg-indigo-600',
-  },
-]
+function taskStatusTone(status, dueDate) {
+  if (status === 'Completed') return 'text-emerald-600'
+  if (dueDate && status !== 'Completed') {
+    const d = new Date(dueDate)
+    if (!Number.isNaN(d.getTime()) && d < new Date()) return 'text-rose-600'
+  }
+  if (status === 'In Progress') return 'text-amber-600'
+  return 'text-slate-600'
+}
 
-const pendingTasks = [
-  { title: 'Finalize Sponsor List', event: 'Musical Night 2026', status: 'OK', tone: 'text-emerald-600' },
-  { title: 'Vendor Ground Map', event: 'Aurudu Uthsawaya', status: 'Soon', tone: 'text-amber-600' },
-  { title: 'Budget Proposal V2', event: 'Cricket Tournament', status: 'Overdue', tone: 'text-rose-600' },
-]
-
-const announcements = [
-  {
-    time: 'Today, 09:42 AM',
-    title: 'General Body Meeting Rescheduled',
-    details: 'The GBM scheduled for tomorrow has been moved to Friday at the Main Hall.',
-  },
-  {
-    time: 'Yesterday',
-    title: 'New Budget Approval Flow',
-    details: 'Please use the new EventHub module for all financial reimbursement requests.',
-  },
-]
+function formatAnnounceTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  if (isToday(d)) return `Today, ${format(d, 'h:mm a')}`
+  if (isYesterday(d)) return 'Yesterday'
+  return formatDistanceToNow(d, { addSuffix: true })
+}
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [user, setUser] = useState(null)
-  const [authReady, setAuthReady] = useState(false)
+  const { user, profile, authReady } = useAuthProfile()
+
+  const [stats, setStats] = useState({
+    totalEvents: '—',
+    memberCount: '—',
+    pendingTasks: '—',
+    completionPct: '—',
+  })
+  const [upcomingEvents, setUpcomingEvents] = useState([])
+  const [pendingRows, setPendingRows] = useState([])
+  const [announcements, setAnnouncements] = useState([])
+  const [dashLoading, setDashLoading] = useState(true)
+  const [dashError, setDashError] = useState(null)
+
+  const displayName = useMemo(
+    () => (authReady ? displayNameFromUser(user, profile) : '…'),
+    [authReady, user, profile],
+  )
+  const avatarInitials = useMemo(() => initialsFromDisplayName(displayName), [displayName])
+  const roleLabel = useMemo(() => roleLabelFromUser(user, profile), [user, profile])
 
   useEffect(() => {
+    if (!authReady) return
     let cancelled = false
 
-    const syncUser = (sessionUser) => {
-      if (!cancelled) setUser(sessionUser ?? null)
+    async function load() {
+      setDashLoading(true)
+      setDashError(null)
+      try {
+        const today = new Date().toISOString().slice(0, 10)
+
+        const eventsCount = await supabase.from('events').select('*', { count: 'exact', head: true })
+        const profilesCount = await supabase.from('profiles').select('*', { count: 'exact', head: true })
+        const allTasks = await supabase.from('tasks').select('id, status')
+
+        let upcoming = []
+        const futureRes = await supabase
+          .from('events')
+          .select('*')
+          .gte('date', today)
+          .order('date', { ascending: true })
+          .limit(8)
+        if (!futureRes.error && futureRes.data?.length) {
+          upcoming = futureRes.data.slice(0, 4)
+        } else {
+          const anyRes = await supabase.from('events').select('*').order('date', { ascending: true }).limit(4)
+          if (!anyRes.error) upcoming = anyRes.data || []
+        }
+
+        const eventIds = upcoming.map((e) => e.id)
+        const taskAgg = {}
+        if (eventIds.length) {
+          const { data: evTasks } = await supabase.from('tasks').select('event_id, status').in('event_id', eventIds)
+          evTasks?.forEach((t) => {
+            if (!taskAgg[t.event_id]) taskAgg[t.event_id] = { total: 0, done: 0 }
+            taskAgg[t.event_id].total += 1
+            if (t.status === 'Completed') taskAgg[t.event_id].done += 1
+          })
+        }
+
+        const mappedEvents = upcoming.map((e) => {
+          const agg = taskAgg[e.id] || { total: 0, done: 0 }
+          const progress = agg.total ? Math.round((agg.done / agg.total) * 100) : 0
+          const bar = TYPE_BAR[e.type] || TYPE_BAR.OTHER
+          let displayDate = '—'
+          if (e.date) {
+            const dt = new Date(e.date)
+            if (!Number.isNaN(dt.getTime())) {
+              displayDate = format(dt, 'MMM d, yyyy')
+            }
+          }
+          return {
+            id: e.id,
+            type: e.type || 'Event',
+            status: e.status || '—',
+            title: e.name,
+            date: displayDate,
+            progress,
+            color: bar,
+          }
+        })
+
+        const tasks = allTasks.data || []
+        const completed = tasks.filter((t) => t.status === 'Completed').length
+        const pending = tasks.filter((t) => t.status !== 'Completed').length
+        const pct = tasks.length ? Math.round((completed / tasks.length) * 100) : 0
+
+        let ann = []
+        let annRes = await supabase.from('announcements').select('*').order('created_at', { ascending: false }).limit(6)
+        if (annRes.error) {
+          annRes = await supabase.from('announcements').select('*').order('published_at', { ascending: false }).limit(6)
+        }
+        if (!annRes.error && annRes.data?.length) {
+          ann = annRes.data.map((a) => ({
+            id: a.id,
+            time: formatAnnounceTime(a.created_at || a.published_at || a.updated_at),
+            title: a.title,
+            details: a.body ?? a.content ?? '',
+          }))
+        }
+
+        let myPending = []
+        if (user?.id) {
+          const taskQuery = () =>
+            supabase
+              .from('tasks')
+              .select('id, title, status, priority, due_date, event_id, events(name)')
+              .neq('status', 'Completed')
+              .or(`assigned_to.eq.${user.id},created_by.eq.${user.id}`)
+              .order('due_date', { ascending: true, nullsFirst: false })
+              .limit(8)
+
+          let tRes = await taskQuery()
+          if (tRes.error) {
+            tRes = await supabase
+              .from('tasks')
+              .select('id, title, status, priority, due_date, event_id')
+              .neq('status', 'Completed')
+              .or(`assigned_to.eq.${user.id},created_by.eq.${user.id}`)
+              .order('due_date', { ascending: true, nullsFirst: false })
+              .limit(8)
+            const rows = tRes.data || []
+            const eids = [...new Set(rows.map((t) => t.event_id).filter(Boolean))]
+            let nameById = {}
+            if (eids.length && !tRes.error) {
+              const { data: evs } = await supabase.from('events').select('id, name').in('id', eids)
+              nameById = Object.fromEntries((evs || []).map((e) => [e.id, e.name]))
+            }
+            myPending = rows.map((t) => ({
+              id: t.id,
+              title: t.title,
+              event: nameById[t.event_id] || 'Event',
+              status: t.status,
+              tone: taskStatusTone(t.status, t.due_date),
+              due_date: t.due_date,
+            }))
+          } else if (tRes.data?.length) {
+            myPending = tRes.data.map((t) => ({
+              id: t.id,
+              title: t.title,
+              event: t.events?.name || 'Event',
+              status: t.status,
+              tone: taskStatusTone(t.status, t.due_date),
+              due_date: t.due_date,
+            }))
+          }
+        }
+
+        if (cancelled) return
+
+        setStats({
+          totalEvents: eventsCount.error ? '—' : String(eventsCount.count ?? 0),
+          memberCount: profilesCount.error ? '—' : String(profilesCount.count ?? 0),
+          pendingTasks: allTasks.error ? '—' : String(pending),
+          completionPct: allTasks.error ? '—' : `${pct}%`,
+        })
+        setUpcomingEvents(mappedEvents)
+        setPendingRows(myPending)
+        setAnnouncements(ann)
+      } catch (e) {
+        if (!cancelled) setDashError(e.message || 'Failed to load dashboard')
+      } finally {
+        if (!cancelled) setDashLoading(false)
+      }
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      syncUser(session?.user ?? null)
-      if (!cancelled) setAuthReady(true)
-    })
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      syncUser(session?.user ?? null)
-    })
-
+    load()
     return () => {
       cancelled = true
-      subscription?.unsubscribe()
     }
-  }, [])
+  }, [authReady, user?.id])
 
-  const displayName = useMemo(() => (authReady ? displayNameFromUser(user) : '…'), [authReady, user])
-  const avatarInitials = useMemo(() => initialsFromDisplayName(displayName), [displayName])
-  const roleLabel = useMemo(() => roleLabelFromUser(user), [user])
+  const statCards = [
+    { label: 'Total', value: stats.totalEvents, caption: 'Events tracked', accent: 'text-indigo-700' },
+    { label: 'Active', value: stats.memberCount, caption: 'Members engaged', accent: 'text-purple-700' },
+    { label: 'Pending', value: stats.pendingTasks, caption: 'Open tasks', accent: 'text-rose-700' },
+    { label: 'Growth', value: stats.completionPct, caption: 'Overall completion', accent: 'text-emerald-700' },
+  ]
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
@@ -171,7 +256,7 @@ export default function Dashboard() {
                 <button
                   key={link.label}
                   type="button"
-                  onClick={() => navigate(link.path)}
+                  onClick={() => link.path && navigate(link.path)}
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
                     link.active
                       ? 'bg-indigo-50 text-indigo-700'
@@ -227,10 +312,15 @@ export default function Dashboard() {
             </div>
           </header>
 
+          {dashError && (
+            <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {dashError}
+            </p>
+          )}
+
           <section className="mt-7">
             <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-              Welcome back, {displayName}{' '}
-              <span className="text-indigo-300">({roleLabel})</span>
+              Welcome back, {displayName} <span className="text-indigo-300">({roleLabel})</span>
             </h1>
             <p className="mt-2 text-base text-slate-600">
               The curated overview of your executive committee responsibilities for FCSC.
@@ -241,7 +331,9 @@ export default function Dashboard() {
             {statCards.map((stat) => (
               <article key={stat.label} className="rounded-2xl border border-slate-200 bg-white p-5">
                 <p className={`text-xs font-bold uppercase tracking-[0.2em] ${stat.accent}`}>{stat.label}</p>
-                <p className="mt-5 text-4xl font-bold tracking-tight text-slate-900">{stat.value}</p>
+                <p className="mt-5 text-4xl font-bold tracking-tight text-slate-900">
+                  {dashLoading ? '…' : stat.value}
+                </p>
                 <p className="mt-1 text-sm font-semibold uppercase tracking-[0.1em] text-slate-500">{stat.caption}</p>
               </article>
             ))}
@@ -251,35 +343,46 @@ export default function Dashboard() {
             <div className="space-y-4 xl:col-span-2">
               <div className="flex items-center justify-between">
                 <h3 className="text-3xl font-bold tracking-tight text-slate-900">Upcoming Events</h3>
-                <button type="button" className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-700">
+                <button
+                  type="button"
+                  onClick={() => navigate('/events')}
+                  className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-700"
+                >
                   View all events
                 </button>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                {events.map((event) => (
-                  <article key={event.title} className="rounded-2xl border border-slate-200 bg-white p-5">
-                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.18em]">
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">{event.type}</span>
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">{event.status}</span>
-                    </div>
-
-                    <h4 className="mt-5 text-3xl font-bold tracking-tight text-slate-900">{event.title}</h4>
-                    <p className="mt-2 flex items-center gap-2 text-sm text-slate-500">
-                      <Calendar className="h-4 w-4" />
-                      {event.date}
-                    </p>
-
-                    <div className="mt-6">
-                      <div className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                        <span>Progress</span>
-                        <span>{event.progress}%</span>
+                {dashLoading && (
+                  <p className="text-sm text-slate-500 md:col-span-2">Loading events…</p>
+                )}
+                {!dashLoading && upcomingEvents.length === 0 && (
+                  <p className="text-sm text-slate-500 md:col-span-2">No events yet. Create one from the Events page.</p>
+                )}
+                {!dashLoading &&
+                  upcomingEvents.map((event) => (
+                    <article key={event.id} className="rounded-2xl border border-slate-200 bg-white p-5">
+                      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.18em]">
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">{event.type}</span>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">{event.status}</span>
                       </div>
-                      <div className="h-2 rounded-full bg-slate-100">
-                        <div className={`h-2 rounded-full ${event.color}`} style={{ width: `${event.progress}%` }} />
+
+                      <h4 className="mt-5 text-3xl font-bold tracking-tight text-slate-900">{event.title}</h4>
+                      <p className="mt-2 flex items-center gap-2 text-sm text-slate-500">
+                        <Calendar className="h-4 w-4" />
+                        {event.date}
+                      </p>
+
+                      <div className="mt-6">
+                        <div className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                          <span>Progress</span>
+                          <span>{event.progress}%</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-slate-100">
+                          <div className={`h-2 rounded-full ${event.color}`} style={{ width: `${event.progress}%` }} />
+                        </div>
                       </div>
-                    </div>
-                  </article>
-                ))}
+                    </article>
+                  ))}
               </div>
             </div>
 
@@ -287,40 +390,50 @@ export default function Dashboard() {
               <section className="rounded-2xl border border-slate-200 bg-white p-5">
                 <h3 className="text-3xl font-bold tracking-tight text-slate-900">My Pending Tasks</h3>
                 <div className="mt-4 space-y-4">
-                  {pendingTasks.map((task) => (
-                    <div key={task.title} className="flex items-start gap-3">
-                      <Circle className="mt-0.5 h-5 w-5 text-slate-400" />
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-medium text-slate-900">{task.title}</p>
-                          <span className={`text-xs font-bold uppercase tracking-[0.14em] ${task.tone}`}>
-                            {task.status}
-                          </span>
+                  {dashLoading && <p className="text-sm text-slate-500">Loading tasks…</p>}
+                  {!dashLoading && pendingRows.length === 0 && (
+                    <p className="text-sm text-slate-500">No open tasks assigned to you.</p>
+                  )}
+                  {!dashLoading &&
+                    pendingRows.map((task) => (
+                      <div key={task.id} className="flex items-start gap-3">
+                        <Circle className="mt-0.5 h-5 w-5 text-slate-400" />
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="font-medium text-slate-900">{task.title}</p>
+                            <span className={`text-xs font-bold uppercase tracking-[0.14em] ${task.tone}`}>
+                              {task.status}
+                            </span>
+                          </div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{task.event}</p>
                         </div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{task.event}</p>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               </section>
 
               <section className="rounded-2xl border border-slate-200 bg-white p-5">
                 <h3 className="text-3xl font-bold tracking-tight text-slate-900">Recent Announcements</h3>
                 <div className="mt-4 space-y-5">
-                  {announcements.map((item, index) => (
-                    <div key={item.title} className="flex gap-3">
-                      {index === 0 ? (
-                        <CircleDot className="mt-1 h-4 w-4 text-indigo-700" />
-                      ) : (
-                        <CheckCircle2 className="mt-1 h-4 w-4 text-fuchsia-700" />
-                      )}
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{item.time}</p>
-                        <p className="mt-1 font-semibold text-slate-900">{item.title}</p>
-                        <p className="mt-1 text-sm text-slate-600">{item.details}</p>
+                  {dashLoading && <p className="text-sm text-slate-500">Loading…</p>}
+                  {!dashLoading && announcements.length === 0 && (
+                    <p className="text-sm text-slate-500">No announcements yet.</p>
+                  )}
+                  {!dashLoading &&
+                    announcements.map((item, index) => (
+                      <div key={item.id ?? item.title} className="flex gap-3">
+                        {index === 0 ? (
+                          <CircleDot className="mt-1 h-4 w-4 text-indigo-700" />
+                        ) : (
+                          <CheckCircle2 className="mt-1 h-4 w-4 text-fuchsia-700" />
+                        )}
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{item.time}</p>
+                          <p className="mt-1 font-semibold text-slate-900">{item.title}</p>
+                          <p className="mt-1 text-sm text-slate-600">{item.details}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               </section>
             </div>

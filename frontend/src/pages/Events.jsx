@@ -42,14 +42,6 @@ export default function Events() {
     navigate(`/events/${eventId}`)
   }
 
-  const handleBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1)
-      return
-    }
-    navigate('/dashboard')
-  }
-
   return (
     <main className="p-6">
       <div className="flex items-center justify-between mb-6">

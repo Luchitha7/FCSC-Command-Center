@@ -11,12 +11,14 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DayPicker } from 'react-day-picker'
-import { addDays, addMonths, endOfWeek, format, isSameDay, isToday, startOfWeek, subMonths } from 'date-fns'
+import { addDays, addMonths, endOfWeek, format, isToday, startOfWeek, subMonths } from 'date-fns'
 import commandCenterLogo from '../assets/command-center-logo.png'
 import { supabase } from '../lib/supabase'
+import { displayNameFromUser, initialsFromDisplayName, roleLabelFromUser } from '../lib/userDisplay'
+import { useAuthProfile } from '../hooks/useAuthProfile'
 import 'react-day-picker/style.css'
 
 const navLinks = [
@@ -31,11 +33,17 @@ const navLinks = [
 
 export default function Calendar() {
   const navigate = useNavigate()
+  const { user, profile, authReady } = useAuthProfile()
+  const headerName = useMemo(
+    () => (authReady ? displayNameFromUser(user, profile) : '…'),
+    [authReady, user, profile],
+  )
+  const headerRole = useMemo(() => roleLabelFromUser(user, profile), [user, profile])
+  const headerInitials = useMemo(() => initialsFromDisplayName(headerName), [headerName])
   const [month, setMonth] = useState(new Date())
   const [selected, setSelected] = useState(new Date())
   const [view, setView] = useState('month')
   const [tasks, setTasks] = useState([])
-  const [loading, setLoading] = useState(true)
 
   const activeDate = selected ?? new Date()
   const weekStart = startOfWeek(activeDate, { weekStartsOn: 0 })
@@ -49,7 +57,6 @@ export default function Calendar() {
 
   const fetchTasks = async () => {
     try {
-      setLoading(true)
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
@@ -59,8 +66,6 @@ export default function Calendar() {
       setTasks(data || [])
     } catch (err) {
       console.error('Error fetching tasks:', err)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -189,8 +194,8 @@ export default function Calendar() {
                 <Bell className="h-4 w-4" />
               </button>
               <div className="text-right">
-                <p className="text-sm font-semibold text-slate-900">Alex Rivera</p>
-                <p className="text-xs text-slate-500">EC Member</p>
+                <p className="text-sm font-semibold text-slate-900">{headerName}</p>
+                <p className="text-xs text-slate-500">{headerRole}</p>
               </div>
               <button
                 type="button"
@@ -198,7 +203,7 @@ export default function Calendar() {
                 className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-900 text-xs font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                 aria-label="Open profile"
               >
-                AR
+                {headerInitials}
               </button>
             </div>
           </header>
