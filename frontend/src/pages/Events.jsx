@@ -39,9 +39,26 @@ export default function Events() {
     navigate(`/events/${eventId}`)
   }
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+    navigate('/dashboard')
+  }
+
   return (
     <main className="p-6">
-      <h1 className="text-2xl font-semibold tracking-tight mb-6">Events</h1>
+      <div className="mb-6 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={handleBack}
+          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+        >
+          ← Back
+        </button>
+        <h1 className="text-2xl font-semibold tracking-tight">Events</h1>
+      </div>
 
       {loading && <p className="text-gray-600">Loading events...</p>}
       {error && <p className="text-red-600">Error: {error}</p>}
