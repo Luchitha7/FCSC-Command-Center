@@ -13,15 +13,16 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 const navLinks = [
-  { label: 'Dashboard', icon: LayoutDashboard },
-  { label: 'Events', icon: Calendar },
-  { label: 'Tasks', icon: ClipboardList },
-  { label: 'Calendar', icon: Calendar },
+  { label: 'Dashboard', icon: LayoutDashboard, path: "/dashboard" },
+  { label: 'Events', icon: Calendar, path: "/events" },
+  { label: 'Tasks', icon: ClipboardList, path: "/tasks" },
+  { label: 'Calendar', icon: Calendar, path: "/calendar" },
   { label: 'New Event', icon: PlusCircle },
-  { label: 'Members', icon: Users },
-  { label: 'Roles', icon: ShieldCheck },
+  { label: 'Members', icon: Users, path: "/members" },
+  { label: 'Roles', icon: ShieldCheck, path: "/roles" },
 ]
 
 const organizingEvents = [
@@ -55,6 +56,7 @@ const recentActivity = [
 ]
 
 export default function Profile() {
+  const navigate = useNavigate()
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
       <div className="mx-auto flex min-h-screen max-w-[1400px]">
@@ -74,6 +76,7 @@ export default function Profile() {
                 <button
                   key={link.label}
                   type="button"
+                  onClick={() => navigate(link.path)}
                   className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
                 >
                   <Icon className="h-4 w-4" />
