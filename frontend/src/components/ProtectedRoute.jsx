@@ -35,8 +35,8 @@ export default function ProtectedRoute({ children }) {
   // While checking auth status
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-gray-600">Loading...</p>
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <p className="text-center text-sm text-gray-600 sm:text-base">Loading...</p>
       </div>
     )
   }

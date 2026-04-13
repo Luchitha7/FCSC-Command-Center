@@ -1,41 +1,33 @@
 import {
   Bell,
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
-  LayoutDashboard,
-  LogOut,
-  PlusCircle,
-  Settings,
-  ShieldCheck,
-  Users,
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DayPicker } from 'react-day-picker'
-import { addDays, addMonths, endOfWeek, format, isSameDay, isToday, startOfWeek, subMonths } from 'date-fns'
-import commandCenterLogo from '../assets/command-center-logo.png'
+import { addDays, addMonths, endOfWeek, format, isToday, startOfWeek, subMonths } from 'date-fns'
 import { supabase } from '../lib/supabase'
+import EcShell from '../components/layout/EcShell'
+import LogoutButton from '../components/LogoutButton'
+import { displayNameFromUser, initialsFromDisplayName, roleLabelFromUser } from '../lib/userDisplay'
+import { useAuthProfile } from '../hooks/useAuthProfile'
+import { getNavItems } from '../hooks/useNavItems'
 import 'react-day-picker/style.css'
-
-const navLinks = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-  { label: 'Events', icon: CalendarDays, path: '/events' },
-  { label: 'Tasks', icon: ClipboardList, path: '/tasks' },
-  { label: 'Calendar', icon: CalendarDays, path: '/calendar', active: true },
-  { label: 'New Event', icon: PlusCircle, path: '/events' },
-  { label: 'Members', icon: Users, path: '/members' },
-  { label: 'Roles', icon: ShieldCheck, path: '/profile' },
-]
 
 export default function Calendar() {
   const navigate = useNavigate()
+  const { user, profile, authReady } = useAuthProfile()
+  const headerName = useMemo(
+    () => (authReady ? displayNameFromUser(user, profile) : '…'),
+    [authReady, user, profile],
+  )
+  const headerRole = useMemo(() => roleLabelFromUser(user, profile), [user, profile])
+  const headerInitials = useMemo(() => initialsFromDisplayName(headerName), [headerName])
   const [month, setMonth] = useState(new Date())
   const [selected, setSelected] = useState(new Date())
   const [view, setView] = useState('month')
   const [tasks, setTasks] = useState([])
-  const [loading, setLoading] = useState(true)
 
   const activeDate = selected ?? new Date()
   const weekStart = startOfWeek(activeDate, { weekStartsOn: 0 })
@@ -49,7 +41,6 @@ export default function Calendar() {
 
   const fetchTasks = async () => {
     try {
-      setLoading(true)
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
@@ -59,8 +50,6 @@ export default function Calendar() {
       setTasks(data || [])
     } catch (err) {
       console.error('Error fetching tasks:', err)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -126,81 +115,40 @@ export default function Calendar() {
     }
   }
 
+  const shellFooter = <LogoutButton />
+
   return (
-    <div className="min-h-screen overflow-x-hidden bg-slate-100 text-slate-900">
-      <div className="mx-auto flex min-h-screen max-w-[1400px]">
-        <aside className="sticky top-0 hidden h-screen w-64 flex-col overflow-y-auto border-r border-slate-200 bg-white p-5 lg:flex">
-          <div>
-            <img src={commandCenterLogo} alt="Command Center logo" className="h-10 w-auto" />
-            <p className="mt-1 text-xs font-semibold tracking-[0.2em] text-slate-400">Executive Committee</p>
-          </div>
-
-          <nav className="mt-8 space-y-1">
-            {navLinks.map((link) => {
-              const Icon = link.icon
-              return (
-                <button
-                  key={link.label}
-                  type="button"
-                  onClick={() => navigate(link.path)}
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
-                    link.active
-                      ? 'bg-indigo-50 text-indigo-700'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {link.label}
-                </button>
-              )
-            })}
-          </nav>
-
-          <div className="mt-auto space-y-1 border-t border-slate-200 pt-4">
-            <button
-              type="button"
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            >
-              <Settings className="h-4 w-4" />
-              Settings
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-red-600 hover:bg-red-50"
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
-            </button>
-          </div>
-        </aside>
-
-        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
-          <header className="flex items-center justify-between border-b border-slate-200 pb-4">
-            <div>
+    <EcShell navItems={getNavItems('calendar')} footer={shellFooter}>
+          <header className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Current View</p>
-              <h2 className="text-lg font-semibold text-slate-900">Calendar Overview</h2>
+              <h2 className="text-lg font-semibold text-slate-900 sm:text-xl">Calendar Overview</h2>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3">
               <button
                 type="button"
-                className="rounded-full border border-slate-200 bg-white p-2 text-slate-500 hover:text-slate-800"
+                className="touch-manipulation rounded-full border border-slate-200 bg-white p-2 text-slate-500 hover:text-slate-800"
               >
                 <Bell className="h-4 w-4" />
               </button>
-              <div className="text-right">
-                <p className="text-sm font-semibold text-slate-900">Alex Rivera</p>
-                <p className="text-xs text-slate-500">EC Member</p>
+              <div className="min-w-0 text-right">
+                <p className="truncate text-sm font-semibold text-slate-900">{headerName}</p>
+                <p className="truncate text-xs text-slate-500">{headerRole}</p>
               </div>
-              <div className="grid h-9 w-9 place-items-center rounded-full bg-slate-900 text-xs font-semibold text-white">
-                AR
-              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/profile')}
+                className="grid h-9 w-9 shrink-0 touch-manipulation place-items-center rounded-full bg-slate-900 text-xs font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                aria-label="Open profile"
+              >
+                {headerInitials}
+              </button>
             </div>
           </header>
 
-          <section className="mt-6 grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <section className="mt-4 grid min-w-0 gap-4 sm:mt-6 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
             <div className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 sm:px-5">
+            <div className="flex flex-col gap-3 border-b border-slate-200 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4 sm:px-5">
               <div className="inline-flex rounded-lg bg-slate-100 p-1 text-sm">
                 {['day', 'week', 'month'].map((tab) => (
                   <button
@@ -216,12 +164,12 @@ export default function Calendar() {
                 ))}
               </div>
 
-              <div className="text-center">
+              <div className="order-first text-center sm:order-none">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Current Range</p>
-                <p className="text-sm font-semibold text-slate-900">{titleByView}</p>
+                <p className="truncate px-1 text-sm font-semibold text-slate-900">{titleByView}</p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center gap-2 sm:justify-end">
                 <button
                   type="button"
                   onClick={goPrev}
@@ -247,7 +195,7 @@ export default function Calendar() {
             </div>
 
             <div className="px-4 pb-4 pt-3 sm:px-5">
-              <h3 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+              <h3 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">
                 {view === 'day' ? (
                   <>
                     {format(activeDate, 'd MMMM')} <span className="font-medium">{format(activeDate, 'yyyy')}</span>
@@ -442,12 +390,12 @@ export default function Calendar() {
             )}
             </div>
 
-            <aside className="space-y-4">
+            <aside className="min-w-0 space-y-4">
               <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Quick Panel</h3>
 
-              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Selected Date</p>
-                <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+                <p className="mt-2 break-words text-lg font-semibold tracking-tight text-slate-900 sm:text-2xl">
                   {format(activeDate, 'EEEE, MMMM d, yyyy')}
                 </p>
                 <p className="mt-2 text-sm text-slate-500">
@@ -455,8 +403,8 @@ export default function Calendar() {
                 </p>
               </article>
 
-              <article className="rounded-2xl bg-gradient-to-br from-indigo-700 to-indigo-800 p-5 text-white shadow-sm">
-                <h4 className="text-2xl font-bold tracking-tight">Need to schedule a new event?</h4>
+              <article className="rounded-2xl bg-gradient-to-br from-indigo-700 to-indigo-800 p-4 text-white shadow-sm sm:p-5">
+                <h4 className="text-xl font-bold tracking-tight sm:text-2xl">Need to schedule a new event?</h4>
                 <p className="mt-2 text-sm text-indigo-100">
                   Create an event first, then use this calendar to organize your team timeline.
                 </p>
@@ -470,8 +418,6 @@ export default function Calendar() {
               </article>
             </aside>
           </section>
-        </main>
-      </div>
-    </div>
+    </EcShell>
   )
 }

@@ -29,28 +29,28 @@ export default function Login() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-slate-100 p-6">
+    <main className="grid min-h-screen place-items-center overflow-x-hidden bg-slate-100 px-4 py-8 sm:p-6">
       <section className="w-full max-w-md">
-        <div className="mb-8 text-center">
+        <div className="mb-6 text-center sm:mb-8">
           <img
             src={commandCenterLogo}
             alt="Command Center logo"
-            className="mx-auto mb-3 h-24 w-auto max-w-[260px] object-contain"
+            className="mx-auto mb-3 h-20 w-auto max-w-[220px] object-contain sm:h-24 sm:max-w-[260px]"
           />
-          <h1 className="text-4xl font-bold tracking-tight text-indigo-800">Command Center</h1>
-          <p className="mt-1 text-sm font-medium text-slate-500">Administrative Portal</p>
+          <h1 className="text-2xl font-bold tracking-tight text-indigo-800 sm:text-4xl">Command Center</h1>
+          <p className="mt-1 text-xs font-medium text-slate-500 sm:text-sm">Administrative Portal</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-3xl font-bold tracking-tight text-slate-900">Welcome Back</h2>
-          <p className="mt-1 text-sm text-slate-500">Please enter your credentials to manage events.</p>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Welcome Back</h2>
+          <p className="mt-1 text-xs text-slate-500 sm:text-sm">Please enter your credentials to manage events.</p>
 
-          <div className="mt-6 space-y-4">
+          <div className="mt-5 space-y-4 sm:mt-6">
             <label className="block">
               <span className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
                 Email Address
               </span>
-              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2.5">
+              <div className="flex min-h-[44px] items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2.5">
                 <span className="text-slate-500">@</span>
                 <input
                   type="email"
@@ -64,7 +64,7 @@ export default function Login() {
 
             <label className="block">
               <span className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Password</span>
-              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2.5">
+              <div className="flex min-h-[44px] items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2.5">
                 <span className="text-slate-500">🔒</span>
                 <input
                   type="password"
@@ -85,7 +85,7 @@ export default function Login() {
             type="button"
             onClick={handleLogin}
             disabled={loading}
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-800 disabled:cursor-not-allowed disabled:opacity-70"
+            className="mt-5 flex w-full touch-manipulation items-center justify-center gap-2 rounded-lg bg-indigo-700 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-indigo-800 disabled:cursor-not-allowed disabled:opacity-70 sm:py-3"
           >
             {loading ? 'Logging in...' : 'Login'}
             <span aria-hidden="true">↪</span>
@@ -98,8 +98,7 @@ export default function Login() {
             </p>
           </div>
         </div>
-
-        </section>
+      </section>
     </main>
   )
 }

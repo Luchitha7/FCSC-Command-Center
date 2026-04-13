@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import AddEventForm from '../components/event/AddEventForm'
+import EcShell from '../components/layout/EcShell'
+import LogoutButton from '../components/LogoutButton'
+import { getNavItems } from '../hooks/useNavItems'
 
 export default function Events() {
   const [events, setEvents] = useState([])
@@ -10,6 +13,8 @@ export default function Events() {
   const [error, setError] = useState(null)
   const [showForm, setShowForm] = useState(false)
   const navigate = useNavigate()
+  const navItems = getNavItems('events')
+  const footerContent = <LogoutButton />
 
   useEffect(() => {
     fetchEvents()
@@ -42,65 +47,64 @@ export default function Events() {
     navigate(`/events/${eventId}`)
   }
 
-  const handleBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1)
-      return
-    }
-    navigate('/dashboard')
-  }
-
   return (
-    <main className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Events</h1>
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition font-medium"
-        >
-          <Plus size={20} />
-          Add Event
-        </button>
-      </div>
-
-      {loading && <p className="text-gray-600">Loading events...</p>}
-      {error && <p className="text-red-600">Error: {error}</p>}
-
-      {!loading && events.length === 0 && (
-        <p className="text-gray-600">No events found</p>
-      )}
-
-      {!loading && events.length > 0 && (
-        <div className="space-y-3">
-          {events.map((event) => (
-            <button
-              key={event.id}
-              onClick={() => handleEventClick(event.id)}
-              className="bg-white p-4 rounded-lg shadow-sm hover:shadow-md transition cursor-pointer w-full text-left"
-            >
-              <h3 className="font-semibold text-gray-900">{event.name}</h3>
-              <p className="text-sm text-gray-600">
-                {new Date(event.date).toLocaleDateString()} • {event.venue}
-              </p>
-              <div className="mt-2 flex gap-2">
-                <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded">
-                  {event.type}
-                </span>
-                <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded">
-                  {event.status}
-                </span>
-              </div>
-            </button>
-          ))}
+    <EcShell navItems={navItems} footer={footerContent}>
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Events</p>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">All Events</h1>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            className="inline-flex touch-manipulation items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 font-medium text-white transition hover:bg-indigo-700 sm:py-2"
+          >
+            <Plus size={20} />
+            Add Event
+          </button>
         </div>
-      )}
 
-      {showForm && (
-        <AddEventForm
-          onClose={() => setShowForm(false)}
-          onEventAdded={fetchEvents}
-        />
-      )}
-    </main>
+        {loading && <p className="text-gray-600">Loading events...</p>}
+        {error && <p className="text-red-600">Error: {error}</p>}
+
+        {!loading && events.length === 0 && (
+          <p className="text-gray-600">No events found</p>
+        )}
+
+        {!loading && events.length > 0 && (
+          <div className="space-y-3">
+            {events.map((event) => (
+              <button
+                key={event.id}
+                type="button"
+                onClick={() => handleEventClick(event.id)}
+                className="w-full cursor-pointer rounded-lg bg-white p-4 text-left shadow-sm transition hover:shadow-md touch-manipulation"
+              >
+                <h3 className="break-words font-semibold text-gray-900">{event.name}</h3>
+                <p className="mt-1 break-words text-sm text-gray-600">
+                  {new Date(event.date).toLocaleDateString()} • {event.venue}
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded">
+                    {event.type}
+                  </span>
+                  <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded">
+                    {event.status}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {showForm && (
+          <AddEventForm
+            onClose={() => setShowForm(false)}
+            onEventAdded={fetchEvents}
+          />
+        )}
+      </div>
+    </EcShell>
   )
 }

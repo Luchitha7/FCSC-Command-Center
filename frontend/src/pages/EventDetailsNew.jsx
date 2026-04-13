@@ -1,59 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { format } from 'date-fns'
 import { ChevronLeft, Calendar, MapPin, Users, CheckCircle, Clock, AlertCircle, Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import EditEventForm from '../components/event/EditEventForm'
 import AddTaskForm from '../components/task/AddTaskForm'
 import EditTaskForm from '../components/task/EditTaskForm'
-
-// Mock data for organizers, milestones (until we create separate tables)
-const mockOrganizers = [
-  {
-    id: 1,
-    name: 'Kavindu P.',
-    role: 'Lead Coordinator',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop',
-  },
-  {
-    id: 2,
-    name: 'Nethmi F.',
-    role: 'Logistics Lead',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop',
-  },
-  {
-    id: 3,
-    name: 'Thisara W.',
-    role: 'Technical Director',
-    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop',
-  },
-]
-
-const mockMilestones = [
-  {
-    date: 'MARCH 10',
-    title: 'Venue Booking Confirmed',
-    description: 'Auditorium slots secured and deposit paid.',
-    completed: true,
-  },
-  {
-    date: 'APRIL 05',
-    title: 'Auditions Completed',
-    description: 'Selected 15 solo artists and 4 bands for the main setlist.',
-    completed: true,
-  },
-  {
-    date: 'APRIL 25',
-    title: 'Ticket Sales Launch',
-    description: 'Early bird tickets will be available on the portal.',
-    completed: false,
-  },
-  {
-    date: 'MAY 14',
-    title: 'Dress Rehearsal',
-    description: 'Final sound check and stage lighting setup.',
-    completed: false,
-  },
-]
 
 export default function EventDetails({ eventId: propEventId, onBack }) {
   const { id: paramEventId } = useParams()
@@ -67,6 +19,11 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
   const [showAddTaskForm, setShowAddTaskForm] = useState(false)
   const [selectedTask, setSelectedTask] = useState(null)
 
+  const [milestones, setMilestones] = useState([])
+  const [organizers, setOrganizers] = useState([])
+  const [announcementsList, setAnnouncementsList] = useState([])
+  const [extrasLoading, setExtrasLoading] = useState(true)
+
   const eventId = propEventId || paramEventId
 
   useEffect(() => {
@@ -74,16 +31,101 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
       fetchEventData()
       fetchEventTasks()
     }
+    // Only reload when navigating to another event
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId])
+
+  useEffect(() => {
+    if (!eventId) return
+    let cancelled = false
+
+    async function loadExtras() {
+      setExtrasLoading(true)
+      try {
+        const [mRes, memRes, annRes] = await Promise.all([
+          supabase.from('milestones').select('*').eq('event_id', eventId).order('due_date', { ascending: true }),
+          supabase
+            .from('event_members')
+            .select('id, role, profiles(full_name, avatar_url, email)')
+            .eq('event_id', eventId),
+          supabase
+            .from('announcements')
+            .select('*')
+            .eq('event_id', eventId)
+            .order('created_at', { ascending: false }),
+        ])
+
+        if (cancelled) return
+
+        if (!mRes.error && mRes.data) setMilestones(mRes.data)
+        else setMilestones([])
+
+        if (!memRes.error && memRes.data?.length) {
+          setOrganizers(
+            memRes.data.map((row) => {
+              const p = row.profiles
+              return {
+                id: row.id,
+                name: p?.full_name?.trim() || p?.email || 'Member',
+                role: row.role || 'Member',
+                avatar: p?.avatar_url || null,
+              }
+            }),
+          )
+        } else if (memRes.error) {
+          const raw = await supabase.from('event_members').select('*').eq('event_id', eventId)
+          const rows = raw.data || []
+          const ids = [...new Set(rows.map((r) => r.user_id || r.profile_id).filter(Boolean))]
+          let byId = {}
+          if (ids.length) {
+            const { data: profs } = await supabase
+              .from('profiles')
+              .select('id, full_name, avatar_url, email')
+              .in('id', ids)
+            byId = Object.fromEntries((profs || []).map((p) => [p.id, p]))
+          }
+          if (!cancelled) {
+            setOrganizers(
+              rows.map((r) => {
+                const uid = r.user_id || r.profile_id
+                const p = byId[uid]
+                return {
+                  id: r.id,
+                  name: p?.full_name?.trim() || p?.email || 'Member',
+                  role: r.role || 'Member',
+                  avatar: p?.avatar_url || null,
+                }
+              }),
+            )
+          }
+        } else {
+          setOrganizers([])
+        }
+
+        if (!annRes.error && annRes.data) setAnnouncementsList(annRes.data)
+        else setAnnouncementsList([])
+      } catch (e) {
+        console.error('Event extras:', e)
+        if (!cancelled) {
+          setMilestones([])
+          setOrganizers([])
+          setAnnouncementsList([])
+        }
+      } finally {
+        if (!cancelled) setExtrasLoading(false)
+      }
+    }
+
+    loadExtras()
+    return () => {
+      cancelled = true
+    }
   }, [eventId])
 
   const fetchEventData = async () => {
     try {
       setLoading(true)
-      const { data, error: fetchError } = await supabase
-        .from('events')
-        .select('*')
-        .eq('id', eventId)
-        .single()
+      const { data, error: fetchError } = await supabase.from('events').select('*').eq('id', eventId).single()
 
       if (fetchError) throw fetchError
       setEventData(data)
@@ -118,9 +160,15 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
     }
   }
 
+  const readiness = useMemo(() => {
+    if (!tasks.length) return 0
+    const done = tasks.filter((t) => t.status === 'Completed').length
+    return Math.round((done / tasks.length) * 100)
+  }, [tasks])
+
   if (loading) {
     return (
-      <div className="p-6">
+      <div className="min-h-screen overflow-x-hidden p-4 sm:p-6">
         <p className="text-gray-600">Loading event...</p>
       </div>
     )
@@ -128,9 +176,13 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
 
   if (error || !eventData) {
     return (
-      <div className="p-6">
+      <div className="min-h-screen overflow-x-hidden p-4 sm:p-6">
         <p className="text-red-600">Error: {error || 'Event not found'}</p>
-        <button onClick={handleBack} className="text-indigo-600 mt-4 hover:text-indigo-700">
+        <button
+          type="button"
+          onClick={handleBack}
+          className="mt-4 touch-manipulation text-indigo-600 hover:text-indigo-700"
+        >
           ← Go back
         </button>
       </div>
@@ -144,75 +196,87 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
     day: 'numeric',
   })
 
+  const memberLabel =
+    organizers.length > 0
+      ? `${organizers.length} team ${organizers.length === 1 ? 'member' : 'members'}`
+      : extrasLoading
+        ? '…'
+        : 'No members yet'
+
+  const rsvpCount = eventData.rsvp_count ?? eventData.attendee_count
+  const rsvpTarget = eventData.rsvp_target ?? eventData.expected_attendees ?? eventData.capacity
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="relative h-64 bg-gradient-to-r from-purple-600 to-purple-800 overflow-hidden">
+    <div className="min-h-screen overflow-x-hidden bg-gray-50">
+      <div className="relative min-h-[14rem] bg-gradient-to-r from-purple-600 to-purple-800 pb-8 sm:h-64 sm:pb-0">
         <button
+          type="button"
           onClick={handleBack}
-          className="absolute top-4 left-4 z-10 flex items-center gap-2 text-white hover:bg-white/20 px-3 py-2 rounded-lg transition"
+          className="absolute left-3 top-3 z-10 flex touch-manipulation items-center gap-2 rounded-lg px-3 py-2 text-sm text-white transition hover:bg-white/20 sm:left-4 sm:top-4"
         >
           <ChevronLeft size={20} />
           Back
         </button>
 
-        {/* Decorative elements */}
         <div className="absolute inset-0 opacity-30">
-          <div className="absolute top-10 right-20 w-32 h-32 bg-purple-500 rounded-full blur-3xl"></div>
-          <div className="absolute bottom-10 left-10 w-40 h-40 bg-purple-700 rounded-full blur-3xl"></div>
+          <div className="absolute right-10 top-10 h-24 w-24 rounded-full bg-purple-500 blur-3xl sm:right-20 sm:h-32 sm:w-32"></div>
+          <div className="absolute bottom-6 left-4 h-28 w-28 rounded-full bg-purple-700 blur-3xl sm:bottom-10 sm:left-10 sm:h-40 sm:w-40"></div>
         </div>
 
-        {/* Content overlay */}
-        <div className="relative pt-24 px-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex gap-2 mb-4">
-                <span className="inline-block px-3 py-1 bg-purple-500 text-white text-xs font-semibold rounded-full">
+        <div className="relative px-4 pb-6 pt-16 sm:px-6 sm:pt-24">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <div className="mb-3 flex flex-wrap gap-2 sm:mb-4">
+                <span className="inline-block rounded-full bg-purple-500 px-2.5 py-1 text-xs font-semibold text-white sm:px-3">
                   {eventData.type}
                 </span>
-                <span className="inline-block px-3 py-1 bg-green-500 text-white text-xs font-semibold rounded-full">
+                <span className="inline-block rounded-full bg-green-500 px-2.5 py-1 text-xs font-semibold text-white sm:px-3">
                   {eventData.status}
                 </span>
               </div>
-              <h1 className="text-4xl font-bold text-white mb-4">{eventData.name}</h1>
-              <div className="flex items-center gap-6 text-white">
-                <div className="flex items-center gap-2">
-                  <Calendar size={18} />
-                  <span>{eventDate}</span>
+              <h1 className="mb-3 break-words text-2xl font-bold text-white sm:mb-4 sm:text-3xl lg:text-4xl">
+                {eventData.name}
+              </h1>
+              <div className="flex flex-col gap-3 text-sm text-white sm:flex-row sm:flex-wrap sm:items-center sm:gap-6 sm:text-base">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Calendar className="shrink-0" size={18} />
+                  <span className="break-words">{eventDate}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <MapPin size={18} />
-                  <span>{eventData.venue}</span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <MapPin className="shrink-0" size={18} />
+                  <span className="break-words">{eventData.venue}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Users size={18} />
-                  <span>TBD Confirmed</span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <Users className="shrink-0" size={18} />
+                  <span>{memberLabel}</span>
                 </div>
               </div>
             </div>
-            <button 
+            <button
+              type="button"
               onClick={() => setShowEditForm(true)}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-semibold transition">
+              className="w-full touch-manipulation rounded-lg bg-indigo-600 px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-indigo-700 sm:w-auto sm:self-start sm:px-6"
+            >
               Manage Event
             </button>
           </div>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Progress Bar */}
-        <div className="mb-8 bg-white p-6 rounded-lg shadow-sm">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        <div className="mb-6 rounded-lg bg-white p-4 shadow-sm sm:mb-8 sm:p-6">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold text-gray-700">OVERALL READINESS</h3>
-            <span className="text-lg font-bold text-indigo-600">68%</span>
+            <span className="text-lg font-bold text-indigo-600">{readiness}%</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
-            <div className="bg-indigo-600 h-2 rounded-full transition-all duration-300" style={{ width: '68%' }}></div>
+            <div
+              className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${readiness}%` }}
+            ></div>
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="mb-8 border-b border-gray-200">
           <div className="flex gap-8 overflow-x-auto">
             {tabs.map((tab) => (
@@ -231,55 +295,62 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
           </div>
         </div>
 
-        {/* Tab Content */}
-        <div className="grid grid-cols-3 gap-8">
-          {/* Main content area */}
-          <div className="col-span-2 space-y-8">
+        <div className="grid grid-cols-1 gap-6 sm:gap-8 lg:grid-cols-3">
+          <div className="space-y-6 sm:space-y-8 lg:col-span-2">
             {activeTab === 'overview' && (
               <>
-                {/* Event Description */}
-                <div className="bg-white p-6 rounded-lg shadow-sm">
-                  <h2 className="text-xl font-semibold mb-4 text-gray-900">Event Description</h2>
-                  <p className="text-gray-600 leading-relaxed">{eventData.description}</p>
+                <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                  <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Event Description</h2>
+                  <p className="text-gray-600 leading-relaxed whitespace-pre-wrap">
+                    {eventData.description || 'No description provided.'}
+                  </p>
                 </div>
 
-                {/* Milestone Timeline */}
-                <div className="bg-white p-6 rounded-lg shadow-sm">
-                  <h2 className="text-xl font-semibold mb-6 text-gray-900">Milestone Timeline</h2>
-                  <div className="space-y-6">
-                    {mockMilestones.map((milestone, idx) => (
-                      <div key={idx} className="flex gap-4">
-                        <div className="flex flex-col items-center">
-                          <div
-                            className={`w-4 h-4 rounded-full ${
-                              milestone.completed ? 'bg-green-500' : 'bg-gray-300'
-                            }`}
-                          ></div>
-                          {idx < mockMilestones.length - 1 && (
-                            <div className="w-1 bg-gray-200 flex-1 my-2" style={{ minHeight: '60px' }}></div>
-                          )}
-                        </div>
-                        <div className="pb-6">
-                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                            {milestone.date}
-                          </p>
-                          <h3 className="text-lg font-semibold text-gray-900 mt-1">{milestone.title}</h3>
-                          <p className="text-sm text-gray-600 mt-2">{milestone.description}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                  <h2 className="mb-4 text-lg font-semibold text-gray-900 sm:mb-6 sm:text-xl">Milestone Timeline</h2>
+                  {extrasLoading && <p className="text-gray-600 text-sm">Loading milestones…</p>}
+                  {!extrasLoading && milestones.length === 0 && (
+                    <p className="text-gray-600 text-sm">No milestones for this event yet.</p>
+                  )}
+                  {!extrasLoading && milestones.length > 0 && (
+                    <div className="space-y-6">
+                      {milestones.map((milestone, idx) => {
+                        const done = milestone.completed === true || milestone.is_completed === true
+                        const rawDate = milestone.due_date || milestone.target_date
+                        const dateLabel =
+                          rawDate && !Number.isNaN(new Date(rawDate).getTime())
+                            ? format(new Date(rawDate), 'MMMM d').toUpperCase()
+                            : 'TBD'
+                        return (
+                          <div key={milestone.id ?? idx} className="flex gap-4">
+                            <div className="flex flex-col items-center">
+                              <div className={`w-4 h-4 rounded-full ${done ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                              {idx < milestones.length - 1 && (
+                                <div className="w-1 bg-gray-200 flex-1 my-2" style={{ minHeight: '60px' }}></div>
+                              )}
+                            </div>
+                            <div className="pb-6">
+                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{dateLabel}</p>
+                              <h3 className="text-lg font-semibold text-gray-900 mt-1">{milestone.title}</h3>
+                              <p className="text-sm text-gray-600 mt-2">{milestone.description || ''}</p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               </>
             )}
 
             {activeTab === 'tasks' && (
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-semibold text-gray-900">Tasks</h2>
+              <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h2 className="text-lg font-semibold text-gray-900 sm:text-xl">Tasks</h2>
                   <button
+                    type="button"
                     onClick={() => setShowAddTaskForm(true)}
-                    className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 transition"
+                    className="inline-flex touch-manipulation items-center justify-center gap-2 rounded bg-indigo-600 px-3 py-2 text-sm text-white transition hover:bg-indigo-700 sm:py-1"
                   >
                     <Plus size={16} />
                     Add Task
@@ -296,20 +367,14 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
                         onClick={() => setSelectedTask(task)}
                         className="flex items-start gap-4 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition"
                       >
-                        <button onClick={() => setSelectedTask(task)} className="mt-1">
-                          {task.status === 'Completed' && (
-                            <CheckCircle className="text-green-500" size={20} />
-                          )}
-                          {task.status === 'In Progress' && (
-                            <Clock className="text-blue-500" size={20} />
-                          )}
-                          {task.status === 'Not Started' && (
-                            <AlertCircle className="text-gray-400" size={20} />
-                          )}
+                        <button type="button" onClick={() => setSelectedTask(task)} className="mt-1">
+                          {task.status === 'Completed' && <CheckCircle className="text-green-500" size={20} />}
+                          {task.status === 'In Progress' && <Clock className="text-blue-500" size={20} />}
+                          {task.status === 'Not Started' && <AlertCircle className="text-gray-400" size={20} />}
                         </button>
                         <div className="flex-1">
                           <h3 className="font-semibold text-gray-900">{task.title}</h3>
-                          <div className="flex items-center gap-2 mt-2">
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
                             <span
                               className={`text-xs px-2 py-1 rounded-full font-semibold ${
                                 task.priority === 'High'
@@ -347,67 +412,119 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
             )}
 
             {activeTab === 'members' && (
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h2 className="text-xl font-semibold mb-4 text-gray-900">Members</h2>
-                <p className="text-gray-600">Members will be displayed here</p>
+              <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Members</h2>
+                {extrasLoading && <p className="text-gray-600">Loading…</p>}
+                {!extrasLoading && organizers.length === 0 && (
+                  <p className="text-gray-600">No members assigned to this event yet.</p>
+                )}
+                {!extrasLoading && organizers.length > 0 && (
+                  <ul className="divide-y divide-gray-200">
+                    {organizers.map((o, i) => (
+                      <li key={i} className="flex items-center gap-3 py-3">
+                        <div className="h-10 w-10 rounded-full bg-indigo-100 text-indigo-700 grid place-items-center text-sm font-semibold">
+                          {o.name
+                            .split(/\s+/)
+                            .filter(Boolean)
+                            .map((p) => p[0])
+                            .join('')
+                            .slice(0, 2)
+                            .toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{o.name}</p>
+                          <p className="text-xs text-gray-500 uppercase">{o.role}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
 
             {activeTab === 'files' && (
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h2 className="text-xl font-semibold mb-4 text-gray-900">Files</h2>
-                <p className="text-gray-600">Files will be displayed here</p>
+              <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Files</h2>
+                <p className="text-gray-600">File attachments are not configured in this build.</p>
               </div>
             )}
 
             {activeTab === 'announcements' && (
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h2 className="text-xl font-semibold mb-4 text-gray-900">Announcements</h2>
-                <p className="text-gray-600">Announcements will be displayed here</p>
+              <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Announcements</h2>
+                {extrasLoading && <p className="text-gray-600">Loading…</p>}
+                {!extrasLoading && announcementsList.length === 0 && (
+                  <p className="text-gray-600">No announcements for this event.</p>
+                )}
+                {!extrasLoading && announcementsList.length > 0 && (
+                  <ul className="space-y-4">
+                    {announcementsList.map((a) => (
+                      <li key={a.id} className="border-b border-gray-100 pb-4 last:border-0">
+                        <p className="font-semibold text-gray-900">{a.title}</p>
+                        <p className="text-sm text-gray-600 mt-1">{a.body ?? a.content}</p>
+                        {(a.created_at || a.published_at) && (
+                          <p className="text-xs text-gray-400 mt-2">
+                            {new Date(a.created_at || a.published_at).toLocaleString()}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
           </div>
 
-          {/* Sidebar */}
-          <div className="col-span-1 space-y-6">
-            {/* Organizers Card */}
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <h3 className="text-lg font-semibold mb-4 text-gray-900">Organizers</h3>
-              <div className="space-y-4">
-                {mockOrganizers.map((organizer, idx) => (
-                  <div key={idx} className="flex items-center gap-3">
-                    <img
-                      src={organizer.avatar}
-                      alt={organizer.name}
-                      className="w-10 h-10 rounded-full object-cover"
-                    />
-                    <div>
-                      <p className="font-semibold text-sm text-gray-900">{organizer.name}</p>
-                      <p className="text-xs text-gray-600 uppercase">{organizer.role}</p>
+          <div className="space-y-6 lg:space-y-6">
+            <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+              <h3 className="mb-3 text-base font-semibold text-gray-900 sm:mb-4 sm:text-lg">Organizers</h3>
+              {extrasLoading && <p className="text-gray-600 text-sm">Loading…</p>}
+              {!extrasLoading && organizers.length === 0 && (
+                <p className="text-gray-600 text-sm">No organizers listed.</p>
+              )}
+              {!extrasLoading && organizers.length > 0 && (
+                <div className="space-y-4">
+                  {organizers.map((organizer, idx) => (
+                    <div key={idx} className="flex items-center gap-3">
+                      {organizer.avatar ? (
+                        <img
+                          src={organizer.avatar}
+                          alt=""
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 grid place-items-center text-xs font-bold">
+                          {organizer.name
+                            .split(/\s+/)
+                            .filter(Boolean)
+                            .map((p) => p[0])
+                            .join('')
+                            .slice(0, 2)
+                            .toUpperCase()}
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-semibold text-sm text-gray-900">{organizer.name}</p>
+                        <p className="text-xs text-gray-600 uppercase">{organizer.role}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-              <button className="mt-4 text-indigo-600 text-sm font-semibold hover:text-indigo-700">
-                View All Team →
-              </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* RSVP Count Card */}
-            <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 p-6 rounded-lg shadow-sm text-white">
-              <h3 className="text-sm font-semibold mb-2 opacity-90">RSVP Count</h3>
-              <p className="text-4xl font-bold mb-1">120</p>
-              <p className="text-xs uppercase opacity-75">Target: 300 Seats</p>
-              <div className="mt-4 flex gap-2">
-                {[...Array(4)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="w-6 h-6 rounded-full bg-white/30 border border-white/50"
-                  ></div>
-                ))}
+            {(rsvpCount != null || rsvpTarget != null) && (
+              <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 p-6 rounded-lg shadow-sm text-white">
+                <h3 className="text-sm font-semibold mb-2 opacity-90">RSVP</h3>
+                <p className="text-4xl font-bold mb-1">{rsvpCount ?? '—'}</p>
+                {rsvpTarget != null && (
+                  <p className="text-xs uppercase opacity-75">Target: {rsvpTarget}</p>
+                )}
               </div>
-            </div>
+            )}
           </div>
+        </div>
+      </div>
 
       {showEditForm && (
         <EditEventForm
@@ -441,8 +558,6 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
           }}
         />
       )}
-        </div>
-      </div>
     </div>
   )
 }
