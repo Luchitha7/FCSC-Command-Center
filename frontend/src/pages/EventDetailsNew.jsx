@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ChevronLeft, Calendar, MapPin, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import EditEventForm from '../components/EditEventForm'
 
 // Mock data for organizers, milestones (until we create separate tables)
 const mockOrganizers = [
@@ -59,6 +60,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
   const [eventData, setEventData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [showEditForm, setShowEditForm] = useState(false)
 
   const eventId = propEventId || paramEventId
 
@@ -167,7 +169,9 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
                 </div>
               </div>
             </div>
-            <button className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-semibold transition">
+            <button 
+              onClick={() => setShowEditForm(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-semibold transition">
               Manage Event
             </button>
           </div>
@@ -317,6 +321,17 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
               </div>
             </div>
           </div>
+
+      {showEditForm && (
+        <EditEventForm
+          event={eventData}
+          onClose={() => setShowEditForm(false)}
+          onEventUpdated={() => {
+            fetchEventData()
+            setShowEditForm(false)
+          }}
+        />
+      )}
         </div>
       </div>
     </div>
