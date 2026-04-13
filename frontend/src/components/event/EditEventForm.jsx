@@ -1,18 +1,19 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../../lib/supabase'
 
-export default function AddEventForm({ onClose, onEventAdded }) {
+export default function EditEventForm({ event, onClose, onEventUpdated }) {
   const [formData, setFormData] = useState({
-    name: '',
-    type: '',
-    description: '',
-    venue: '',
-    date: '',
-    status: 'Planning',
+    name: event.name,
+    type: event.type,
+    description: event.description || '',
+    venue: event.venue,
+    date: event.date,
+    status: event.status,
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -35,43 +36,63 @@ export default function AddEventForm({ onClose, onEventAdded }) {
         return
       }
 
-      // Get current user
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      console.log('Updating event with ID:', event.id)
+      console.log('Form data:', formData)
 
-      if (!user) {
-        setError('User not authenticated')
-        setLoading(false)
-        return
-      }
-
-      // Insert event
-      const { data, error: insertError } = await supabase
+      // Update event
+      const { data, error: updateError } = await supabase
         .from('events')
-        .insert([
-          {
-            name: formData.name,
-            type: formData.type,
-            description: formData.description,
-            venue: formData.venue,
-            date: formData.date,
-            status: formData.status,
-            created_by: user.id,
-          },
-        ])
+        .update({
+          name: formData.name,
+          type: formData.type,
+          description: formData.description,
+          venue: formData.venue,
+          date: formData.date,
+          status: formData.status,
+        })
+        .eq('id', event.id)
         .select()
 
-      if (insertError) throw insertError
+      console.log('Update response:', { data, error: updateError })
 
-      console.log('Event created:', data)
-      onEventAdded()
+      if (updateError) throw updateError
+
+      console.log('Event updated successfully:', data)
+      setError(null)
+      onEventUpdated()
+      onClose()
+    } catch (err) {
+      console.error('Error updating event:', err)
+      setError(err.message || 'Failed to update event')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!window.confirm('Are you sure you want to delete this event? This action cannot be undone.')) {
+      return
+    }
+
+    setDeleteLoading(true)
+    setError(null)
+
+    try {
+      const { error: deleteError } = await supabase
+        .from('events')
+        .delete()
+        .eq('id', event.id)
+
+      if (deleteError) throw deleteError
+
+      console.log('Event deleted successfully')
+      onEventUpdated()
       onClose()
     } catch (err) {
       setError(err.message)
-      console.error('Error creating event:', err)
+      console.error('Error deleting event:', err)
     } finally {
-      setLoading(false)
+      setDeleteLoading(false)
     }
   }
 
@@ -83,7 +104,7 @@ export default function AddEventForm({ onClose, onEventAdded }) {
       <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-screen overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-200 p-6">
-          <h2 className="text-2xl font-semibold text-gray-900">Create New Event</h2>
+          <h2 className="text-2xl font-semibold text-gray-900">Edit Event</h2>
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700"
@@ -208,11 +229,19 @@ export default function AddEventForm({ onClose, onEventAdded }) {
               Cancel
             </button>
             <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleteLoading}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition disabled:opacity-50"
+            >
+              {deleteLoading ? 'Deleting...' : 'Delete'}
+            </button>
+            <button
               type="submit"
               disabled={loading}
               className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition disabled:opacity-50"
             >
-              {loading ? 'Creating...' : 'Create Event'}
+              {loading ? 'Updating...' : 'Update Event'}
             </button>
           </div>
         </form>
