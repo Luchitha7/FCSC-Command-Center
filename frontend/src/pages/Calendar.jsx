@@ -11,7 +11,7 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DayPicker } from 'react-day-picker'
 import { addDays, addMonths, endOfWeek, format, isSameDay, isToday, startOfWeek, subMonths } from 'date-fns'
@@ -34,12 +34,55 @@ export default function Calendar() {
   const [month, setMonth] = useState(new Date())
   const [selected, setSelected] = useState(new Date())
   const [view, setView] = useState('month')
+  const [tasks, setTasks] = useState([])
+  const [loading, setLoading] = useState(true)
 
   const activeDate = selected ?? new Date()
   const weekStart = startOfWeek(activeDate, { weekStartsOn: 0 })
   const weekEnd = endOfWeek(activeDate, { weekStartsOn: 0 })
   const weekDates = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index))
   const timeLabels = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, '0')}:00`)
+
+  useEffect(() => {
+    fetchTasks()
+  }, [])
+
+  const fetchTasks = async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .order('due_date', { ascending: true })
+
+      if (error) throw error
+      setTasks(data || [])
+    } catch (err) {
+      console.error('Error fetching tasks:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getTasksForDate = (date) => {
+    if (!tasks.length) return []
+    const dateStr = format(date, 'yyyy-MM-dd')
+    return tasks.filter((task) => {
+      if (!task.due_date) return false
+      return format(new Date(task.due_date), 'yyyy-MM-dd') === dateStr
+    })
+  }
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Completed':
+        return 'bg-green-500'
+      case 'In Progress':
+        return 'bg-blue-500'
+      default:
+        return 'bg-yellow-500'
+    }
+  }
 
   const titleByView =
     view === 'month'
@@ -245,12 +288,45 @@ export default function Calendar() {
                     week: 'grid grid-cols-7',
                     day: 'flex items-center justify-center p-1',
                     day_button:
-                      'h-12 w-12 rounded-2xl border border-transparent bg-white text-sm font-semibold text-slate-700 transition hover:border-indigo-100 hover:bg-indigo-50 hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 aria-selected:border-indigo-300 aria-selected:bg-indigo-700 aria-selected:text-white aria-selected:shadow-sm',
+                      'relative h-12 w-12 rounded-2xl border border-transparent bg-white text-sm font-semibold text-slate-700 transition hover:border-indigo-100 hover:bg-indigo-50 hover:text-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 aria-selected:border-indigo-300 aria-selected:bg-indigo-700 aria-selected:text-white aria-selected:shadow-sm',
                     outside: 'text-slate-300 opacity-80',
                     today: 'text-indigo-700',
                     selected: 'bg-transparent',
                   }}
                 />
+
+                {/* Tasks indicator below calendar */}
+                <div className="mt-6 pt-6 border-t border-slate-200">
+                  <div className="mb-4">
+                    <h4 className="font-semibold text-slate-900">
+                      Tasks for {format(selected, 'MMMM d, yyyy')}
+                    </h4>
+                  </div>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {getTasksForDate(selected).length > 0 ? (
+                      getTasksForDate(selected).map((task) => (
+                        <div
+                          key={task.id}
+                          className="flex items-start gap-3 rounded-lg bg-slate-50 p-3 text-sm hover:bg-slate-100 transition"
+                        >
+                          <div
+                            className={`mt-1 h-2.5 w-2.5 rounded-full flex-shrink-0 ${getStatusColor(
+                              task.status
+                            )}`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-slate-900 truncate">{task.title}</p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Status: <span className="font-medium">{task.status}</span>
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-500">No tasks scheduled for this date</p>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -284,9 +360,30 @@ export default function Calendar() {
 
                       <div className="grid grid-cols-[72px_repeat(7,minmax(120px,1fr))] border-b border-slate-200">
                         <div className="border-r border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500">all-day</div>
-                        {weekDates.map((date) => (
-                          <div key={`allday-${date.toISOString()}`} className="border-r border-slate-200 py-1 last:border-r-0" />
-                        ))}
+                        {weekDates.map((date) => {
+                          const dayTasks = getTasksForDate(date)
+                          return (
+                            <div
+                              key={`allday-${date.toISOString()}`}
+                              className="border-r border-slate-200 py-1 px-1 last:border-r-0 space-y-1"
+                            >
+                              {dayTasks.slice(0, 2).map((task) => (
+                                <div
+                                  key={task.id}
+                                  className={`text-xs px-2 py-1 rounded text-white truncate ${getStatusColor(
+                                    task.status
+                                  )}`}
+                                  title={task.title}
+                                >
+                                  {task.title}
+                                </div>
+                              ))}
+                              {dayTasks.length > 2 && (
+                                <div className="text-xs text-slate-500 px-2">+{dayTasks.length - 2} more</div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
 
                       {timeLabels.map((time) => (
@@ -317,7 +414,19 @@ export default function Calendar() {
 
                       <div className="grid grid-cols-[72px_1fr] border-b border-slate-200">
                         <div className="border-r border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500">all-day</div>
-                        <div className="py-1" />
+                        <div className="py-1 px-4 space-y-1">
+                          {getTasksForDate(activeDate).map((task) => (
+                            <div
+                              key={task.id}
+                              className={`text-xs px-2 py-1 rounded text-white truncate font-medium ${getStatusColor(
+                                task.status
+                              )}`}
+                              title={task.title}
+                            >
+                              {task.title}
+                            </div>
+                          ))}
+                        </div>
                       </div>
 
                       {timeLabels.map((time) => (
