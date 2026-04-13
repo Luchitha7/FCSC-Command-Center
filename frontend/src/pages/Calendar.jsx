@@ -192,9 +192,14 @@ export default function Calendar() {
                 <p className="text-sm font-semibold text-slate-900">Alex Rivera</p>
                 <p className="text-xs text-slate-500">EC Member</p>
               </div>
-              <div className="grid h-9 w-9 place-items-center rounded-full bg-slate-900 text-xs font-semibold text-white">
+              <button
+                type="button"
+                onClick={() => navigate('/profile')}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-900 text-xs font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                aria-label="Open profile"
+              >
                 AR
-              </div>
+              </button>
             </div>
           </header>
 

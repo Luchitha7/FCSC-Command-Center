@@ -215,12 +215,15 @@ export default function Dashboard() {
               >
                 <Bell className="h-4 w-4" />
               </button>
-              <div
-                className="grid h-9 w-9 place-items-center rounded-full bg-slate-900 text-sm font-semibold text-white"
+              <button
+                type="button"
+                onClick={() => navigate('/profile')}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-900 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                 title={user?.email || displayName}
+                aria-label="Open profile"
               >
                 {avatarInitials}
-              </div>
+              </button>
             </div>
           </header>
 
