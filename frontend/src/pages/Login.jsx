@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
+import commandCenterLogo from '../assets/command-center-logo.png'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -31,10 +32,12 @@ export default function Login() {
     <main className="grid min-h-screen place-items-center bg-slate-100 p-6">
       <section className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-[#0B4B6E] to-[#0D2D7D] text-xl font-bold text-white shadow-sm">
-            FC
-          </div>
-          <h1 className="text-4xl font-bold tracking-tight text-indigo-800">EventHub</h1>
+          <img
+            src={commandCenterLogo}
+            alt="Command Center logo"
+            className="mx-auto mb-3 h-24 w-auto max-w-[260px] object-contain"
+          />
+          <h1 className="text-4xl font-bold tracking-tight text-indigo-800">Command Center</h1>
           <p className="mt-1 text-sm font-medium text-slate-500">Administrative Portal</p>
         </div>
 
@@ -90,14 +93,13 @@ export default function Login() {
 
           <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
             <p className="leading-relaxed">
-              Contact your EC administrator to get access. Unauthorized access to the EventHub management system is
+              Contact your Executive Committee administrator to get access. Unauthorized access to the system is
               strictly prohibited.
             </p>
           </div>
         </div>
 
-        <p className="mt-10 text-center text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">FCSC © 2024</p>
-      </section>
+        </section>
     </main>
   )
 }

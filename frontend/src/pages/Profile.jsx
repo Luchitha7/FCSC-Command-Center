@@ -14,6 +14,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import commandCenterLogo from '../assets/command-center-logo.png'
 
 const navLinks = [
   { label: 'Dashboard', icon: LayoutDashboard, path: "/dashboard" },
@@ -62,9 +63,9 @@ export default function Profile() {
       <div className="mx-auto flex min-h-screen max-w-[1400px]">
         <aside className="hidden w-64 flex-col border-r border-slate-200 bg-white p-5 lg:flex">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-700 font-bold text-white">EH</div>
+            <img src={commandCenterLogo} alt="Command Center logo" className="h-10 w-auto" />
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-indigo-700">EventHub</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-indigo-700">Command Center</h1>
               <p className="mt-1 text-xs font-semibold tracking-[0.2em] text-slate-400">Executive Committee</p>
             </div>
           </div>
