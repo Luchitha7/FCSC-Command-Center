@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 /**
@@ -8,6 +8,18 @@ export function useAuthProfile() {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [authReady, setAuthReady] = useState(false)
+
+  const refetchProfile = useCallback(async () => {
+    const {
+      data: { user: u },
+    } = await supabase.auth.getUser()
+    if (!u?.id) {
+      setProfile(null)
+      return
+    }
+    const { data: p } = await supabase.from('profiles').select('*').eq('id', u.id).maybeSingle()
+    setProfile(p ?? null)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -43,5 +55,5 @@ export function useAuthProfile() {
     }
   }, [])
 
-  return { user, profile, authReady }
+  return { user, profile, authReady, refetchProfile }
 }

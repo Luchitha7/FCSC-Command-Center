@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Download,
   LayoutDashboard,
+  Pencil,
   PlusCircle,
   Settings,
   Shield,
@@ -17,8 +18,9 @@ import { useNavigate } from 'react-router-dom'
 import { format, formatDistanceToNow } from 'date-fns'
 import commandCenterLogo from '../assets/command-center-logo.png'
 import LogoutButton from '../components/LogoutButton'
+import EditProfileModal from '../components/profile/EditProfileModal'
 import { supabase } from '../lib/supabase'
-import { displayNameFromUser, initialsFromDisplayName, roleLabelFromUser } from '../lib/userDisplay'
+import { displayNameFromUser, initialsFromDisplayName } from '../lib/userDisplay'
 import { useAuthProfile } from '../hooks/useAuthProfile'
 
 const navLinks = [
@@ -33,8 +35,10 @@ const navLinks = [
 
 export default function Profile() {
   const navigate = useNavigate()
-  const { user, profile, authReady } = useAuthProfile()
+  const { user, profile, authReady, refetchProfile } = useAuthProfile()
 
+  const [editOpen, setEditOpen] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
   const [hostedCount, setHostedCount] = useState(null)
   const [taskRate, setTaskRate] = useState(null)
   const [organizing, setOrganizing] = useState([])
@@ -48,7 +52,6 @@ export default function Profile() {
     [authReady, user, profile],
   )
   const initials = useMemo(() => initialsFromDisplayName(displayName), [displayName])
-  const roleLabel = useMemo(() => roleLabelFromUser(user, profile), [user, profile])
 
   useEffect(() => {
     if (!authReady || !user?.id) {
@@ -117,7 +120,18 @@ export default function Profile() {
     }
   }, [authReady, user?.id])
 
+  useEffect(() => {
+    if (!saveSuccess) return
+    const t = setTimeout(() => setSaveSuccess(false), 5000)
+    return () => clearTimeout(t)
+  }, [saveSuccess])
+
   const email = profile?.email || user?.email || ''
+
+  const handleProfileSaved = async () => {
+    await refetchProfile()
+    setSaveSuccess(true)
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
@@ -163,6 +177,15 @@ export default function Profile() {
         </aside>
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8">
+          {saveSuccess && (
+            <div
+              className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800"
+              role="status"
+            >
+              Your profile was updated successfully.
+            </div>
+          )}
+
           <header className="flex items-center justify-between border-b border-slate-200 pb-4">
             <h2 className="text-xl font-bold tracking-tight text-indigo-700">Profile Settings</h2>
             <div className="flex items-center gap-3">
@@ -172,9 +195,6 @@ export default function Profile() {
               >
                 <Bell className="h-4 w-4" />
               </button>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                {roleLabel}
-              </span>
               <div className="grid h-9 w-9 place-items-center rounded-lg bg-indigo-700 text-sm font-semibold text-white">
                 {initials}
               </div>
@@ -198,17 +218,7 @@ export default function Profile() {
 
               <div className="min-w-[220px] flex-1">
                 <h1 className="text-4xl font-bold tracking-tight text-slate-900">{displayName}</h1>
-                <p className="mt-1 flex items-center gap-2 text-sm font-medium text-slate-600">
-                  <ShieldCheck className="h-4 w-4 text-slate-400" />
-                  {roleLabel}
-                </p>
-                {profile?.role && (
-                  <div className="mt-3 flex gap-2">
-                    <span className="rounded-full bg-indigo-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-700">
-                      {profile.role}
-                    </span>
-                  </div>
-                )}
+                <p className="mt-1 text-sm text-slate-500">{email}</p>
               </div>
 
               <div className="flex gap-3">
@@ -231,15 +241,23 @@ export default function Profile() {
           <section className="mt-6 grid gap-5 xl:grid-cols-3">
             <div className="space-y-5 xl:col-span-2">
               <article className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-                <div className="mb-5 flex items-center justify-between">
+                <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
                   <h3 className="text-3xl font-bold tracking-tight text-slate-900">Personal Information</h3>
+                  <button
+                    type="button"
+                    onClick={() => setEditOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-white transition hover:bg-indigo-700"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Edit profile
+                  </button>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="space-y-1">
                     <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Full Name</span>
                     <input
                       readOnly
-                      value={displayName}
+                      value={profile?.full_name || displayName}
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-700"
                     />
                   </label>
@@ -252,14 +270,18 @@ export default function Profile() {
                     />
                   </label>
                 </div>
-                <label className="mt-4 block space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Department</span>
-                  <input
-                    readOnly
-                    value={profile?.department || '—'}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-700"
-                  />
-                </label>
+
+                <div className="mt-6 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+                  <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-700">Student ID</h4>
+                  <label className="mt-2 block space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Student ID</span>
+                    <input
+                      readOnly
+                      value={profile?.stu_id || '—'}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700"
+                    />
+                  </label>
+                </div>
               </article>
 
               <article className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
@@ -398,6 +420,14 @@ export default function Profile() {
           </section>
         </main>
       </div>
+
+      <EditProfileModal
+        isOpen={editOpen}
+        onClose={() => setEditOpen(false)}
+        user={user}
+        profile={profile}
+        onSaved={handleProfileSaved}
+      />
     </div>
   )
 }
