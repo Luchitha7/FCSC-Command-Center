@@ -13,6 +13,7 @@ export default function AppRouter() {
   return (
     <Routes>
       <Route path="/" element={<Login />} />
+      <Route path="/login" element={<Login />} />
       
       {/* Protected Routes */}
       <Route

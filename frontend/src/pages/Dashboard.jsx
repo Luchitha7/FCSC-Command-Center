@@ -6,7 +6,6 @@ import {
   CircleDot,
   ClipboardList,
   LayoutDashboard,
-  LogOut,
   PlusCircle,
   Settings,
   ShieldCheck,
@@ -15,6 +14,7 @@ import {
 import commandCenterLogo from '../assets/command-center-logo.png'
 
 import { useNavigate } from 'react-router-dom'
+import LogoutButton from '../components/LogoutButton'
 
 const navLinks = [
   { label: 'Dashboard', icon: LayoutDashboard, active: true },
@@ -129,13 +129,9 @@ export default function Dashboard() {
               <Settings className="h-4 w-4" />
               Settings
             </button>
-            <button
-              type="button"
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
-            </button>
+            <div className="w-full">
+              <LogoutButton />
+            </div>
           </div>
         </aside>
 
