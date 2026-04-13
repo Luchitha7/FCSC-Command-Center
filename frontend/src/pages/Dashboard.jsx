@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react'
+import commandCenterLogo from '../assets/command-center-logo.png'
 
 import { useNavigate } from 'react-router-dom'
 
@@ -95,7 +96,7 @@ export default function Dashboard() {
       <div className="mx-auto flex min-h-screen max-w-[1400px]">
         <aside className="hidden w-64 flex-col border-r border-slate-200 bg-white p-5 lg:flex">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-indigo-700">EventHub</h1>
+            <img src={commandCenterLogo} alt="Command Center logo" className="h-10 w-auto" />
             <p className="mt-1 text-xs font-semibold tracking-[0.2em] text-slate-400">Executive Committee</p>
           </div>
 
