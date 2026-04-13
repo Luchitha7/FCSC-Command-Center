@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import AddEventForm from '../components/AddEventForm'
 
 export default function Events() {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [showForm, setShowForm] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -49,15 +52,15 @@ export default function Events() {
 
   return (
     <main className="p-6">
-      <div className="mb-6 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={handleBack}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
-        >
-          ← Back
-        </button>
+      <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Events</h1>
+        <button
+          onClick={() => setShowForm(true)}
+          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition font-medium"
+        >
+          <Plus size={20} />
+          Add Event
+        </button>
       </div>
 
       {loading && <p className="text-gray-600">Loading events...</p>}
@@ -90,6 +93,13 @@ export default function Events() {
             </button>
           ))}
         </div>
+      )}
+
+      {showForm && (
+        <AddEventForm
+          onClose={() => setShowForm(false)}
+          onEventAdded={fetchEvents}
+        />
       )}
     </main>
   )
