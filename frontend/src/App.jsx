@@ -1,9 +1,7 @@
-import AppRouter from './routes/AppRouter.jsx'
+import AppRouter from './routes/AppRouter'
 
-export default function App() {
-  return (
-    <div className="min-h-screen bg-neutral-50 text-neutral-900 antialiased">
-      <AppRouter />
-    </div>
-  )
+function App() {
+  return <AppRouter />
 }
+
+export default App
