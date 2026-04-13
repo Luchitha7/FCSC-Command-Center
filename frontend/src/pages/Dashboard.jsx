@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react'
 import {
   Bell,
   Calendar,
@@ -15,6 +16,40 @@ import commandCenterLogo from '../assets/command-center-logo.png'
 
 import { useNavigate } from 'react-router-dom'
 import LogoutButton from '../components/LogoutButton'
+import { supabase } from '../lib/supabase'
+
+function displayNameFromUser(user) {
+  if (!user) return 'Member'
+  const meta = user.user_metadata || {}
+  const raw =
+    meta.full_name ||
+    meta.name ||
+    meta.display_name ||
+    meta.preferred_username
+  if (raw && String(raw).trim()) return String(raw).trim()
+  if (user.email) {
+    const local = user.email.split('@')[0]
+    return local
+      .replace(/[._-]+/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+  }
+  return 'Member'
+}
+
+function initialsFromDisplayName(displayName) {
+  if (!displayName || displayName === 'Member') return '?'
+  const parts = displayName.trim().split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  }
+  if (displayName.length >= 2) return displayName.slice(0, 2).toUpperCase()
+  return displayName[0].toUpperCase()
+}
+
+function roleLabelFromUser(user) {
+  const meta = user?.user_metadata || {}
+  return meta.role || meta.title || 'EC Member'
+}
 
 const navLinks = [
   { label: 'Dashboard', icon: LayoutDashboard, active: true },
@@ -88,8 +123,37 @@ const announcements = [
 ]
 
 export default function Dashboard() {
+  const navigate = useNavigate()
+  const [user, setUser] = useState(null)
+  const [authReady, setAuthReady] = useState(false)
 
-  const navigate = useNavigate();
+  useEffect(() => {
+    let cancelled = false
+
+    const syncUser = (sessionUser) => {
+      if (!cancelled) setUser(sessionUser ?? null)
+    }
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      syncUser(session?.user ?? null)
+      if (!cancelled) setAuthReady(true)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      syncUser(session?.user ?? null)
+    })
+
+    return () => {
+      cancelled = true
+      subscription?.unsubscribe()
+    }
+  }, [])
+
+  const displayName = useMemo(() => (authReady ? displayNameFromUser(user) : '…'), [authReady, user])
+  const avatarInitials = useMemo(() => initialsFromDisplayName(displayName), [displayName])
+  const roleLabel = useMemo(() => roleLabelFromUser(user), [user])
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
@@ -143,7 +207,7 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center gap-3">
               <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                EC Member
+                {roleLabel}
               </span>
               <button
                 type="button"
@@ -151,15 +215,19 @@ export default function Dashboard() {
               >
                 <Bell className="h-4 w-4" />
               </button>
-              <div className="grid h-9 w-9 place-items-center rounded-full bg-slate-900 text-sm font-semibold text-white">
-                KP
+              <div
+                className="grid h-9 w-9 place-items-center rounded-full bg-slate-900 text-sm font-semibold text-white"
+                title={user?.email || displayName}
+              >
+                {avatarInitials}
               </div>
             </div>
           </header>
 
           <section className="mt-7">
             <h1 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-              Welcome back, Kavindu P. <span className="text-indigo-300">(EC Member)</span>
+              Welcome back, {displayName}{' '}
+              <span className="text-indigo-300">({roleLabel})</span>
             </h1>
             <p className="mt-2 text-base text-slate-600">
               The curated overview of your executive committee responsibilities for FCSC.
