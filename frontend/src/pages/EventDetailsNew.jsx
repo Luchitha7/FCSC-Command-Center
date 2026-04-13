@@ -1,101 +1,125 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, Calendar, MapPin, Users, FileText, Bell } from 'lucide-react'
+import { ChevronLeft, Calendar, MapPin, Users } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 
-// Mock event data - replace with API call once backend is ready
-const mockEvents = {
-  1: {
+// Mock data for organizers, milestones (until we create separate tables)
+const mockOrganizers = [
+  {
     id: 1,
-    title: 'Musical Night 2026',
-    category: 'MUSICAL',
-    status: 'ACTIVE',
-    date: 'May 15, 2026',
-    location: 'University Auditorium',
-    attendees: 120,
-    readiness: 68,
-    description:
-      'The Musical Night 2026 is our flagship cultural event of the year. Bringing together talented musicians, vocalists, and performers from across the campus, this night promises an eclectic mix of contemporary pop, classical compositions, and fusion rhythms. The event serves as a platform to celebrate student artistry and strengthen community bonds through the universal language of music.',
-    organizers: [
-      {
-        id: 1,
-        name: 'Kavindu P.',
-        role: 'Lead Coordinator',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop',
-      },
-      {
-        id: 2,
-        name: 'Nethmi F.',
-        role: 'Logistics Lead',
-        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop',
-      },
-      {
-        id: 3,
-        name: 'Thisara W.',
-        role: 'Technical Director',
-        avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop',
-      },
-    ],
-    rsvpCount: 120,
-    rsvpTarget: 300,
-    milestones: [
-      {
-        date: 'MARCH 10',
-        title: 'Venue Booking Confirmed',
-        description: 'Auditorium slots secured and deposit paid.',
-        completed: true,
-      },
-      {
-        date: 'APRIL 05',
-        title: 'Auditions Completed',
-        description: 'Selected 15 solo artists and 4 bands for the main setlist.',
-        completed: true,
-      },
-      {
-        date: 'APRIL 25',
-        title: 'Ticket Sales Launch',
-        description: 'Early bird tickets will be available on the portal.',
-        completed: false,
-      },
-      {
-        date: 'MAY 14',
-        title: 'Dress Rehearsal',
-        description: 'Final sound check and stage lighting setup.',
-        completed: false,
-      },
-    ],
+    name: 'Kavindu P.',
+    role: 'Lead Coordinator',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop',
   },
-}
+  {
+    id: 2,
+    name: 'Nethmi F.',
+    role: 'Logistics Lead',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop',
+  },
+  {
+    id: 3,
+    name: 'Thisara W.',
+    role: 'Technical Director',
+    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop',
+  },
+]
 
-export default function EventDetails({ event, onBack }) {
-  const { id } = useParams()
+const mockMilestones = [
+  {
+    date: 'MARCH 10',
+    title: 'Venue Booking Confirmed',
+    description: 'Auditorium slots secured and deposit paid.',
+    completed: true,
+  },
+  {
+    date: 'APRIL 05',
+    title: 'Auditions Completed',
+    description: 'Selected 15 solo artists and 4 bands for the main setlist.',
+    completed: true,
+  },
+  {
+    date: 'APRIL 25',
+    title: 'Ticket Sales Launch',
+    description: 'Early bird tickets will be available on the portal.',
+    completed: false,
+  },
+  {
+    date: 'MAY 14',
+    title: 'Dress Rehearsal',
+    description: 'Final sound check and stage lighting setup.',
+    completed: false,
+  },
+]
+
+export default function EventDetails({ eventId: propEventId, onBack }) {
+  const { id: paramEventId } = useParams()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('overview')
-  const [eventData, setEventData] = useState(event || mockEvents[id] || null)
+  const [eventData, setEventData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const eventId = propEventId || paramEventId
 
   useEffect(() => {
-    if (!event && id) {
-      // Load event from mock data or API
-      setEventData(mockEvents[id] || null)
+    if (eventId) {
+      fetchEventData()
     }
-  }, [id, event])
+  }, [eventId])
+
+  const fetchEventData = async () => {
+    try {
+      setLoading(true)
+      const { data, error: fetchError } = await supabase
+        .from('events')
+        .select('*')
+        .eq('id', eventId)
+        .single()
+
+      if (fetchError) throw fetchError
+      setEventData(data)
+    } catch (err) {
+      setError(err.message)
+      console.error('Error fetching event:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleBack = () => {
     if (onBack) {
       onBack()
-    } else if (id) {
+    } else if (paramEventId) {
       navigate('/events')
     }
   }
 
-  if (!eventData) {
+  if (loading) {
     return (
       <div className="p-6">
-        <p className="text-gray-600">Event not found</p>
+        <p className="text-gray-600">Loading event...</p>
+      </div>
+    )
+  }
+
+  if (error || !eventData) {
+    return (
+      <div className="p-6">
+        <p className="text-red-600">Error: {error || 'Event not found'}</p>
+        <button onClick={handleBack} className="text-indigo-600 mt-4 hover:text-indigo-700">
+          ← Go back
+        </button>
       </div>
     )
   }
 
   const tabs = ['overview', 'tasks', 'members', 'files', 'announcements']
+  const eventDate = new Date(eventData.date).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -109,7 +133,7 @@ export default function EventDetails({ event, onBack }) {
           Back
         </button>
 
-        {/* Decorative elements like in screenshot */}
+        {/* Decorative elements */}
         <div className="absolute inset-0 opacity-30">
           <div className="absolute top-10 right-20 w-32 h-32 bg-purple-500 rounded-full blur-3xl"></div>
           <div className="absolute bottom-10 left-10 w-40 h-40 bg-purple-700 rounded-full blur-3xl"></div>
@@ -121,25 +145,25 @@ export default function EventDetails({ event, onBack }) {
             <div>
               <div className="flex gap-2 mb-4">
                 <span className="inline-block px-3 py-1 bg-purple-500 text-white text-xs font-semibold rounded-full">
-                  {eventData.category}
+                  {eventData.type}
                 </span>
                 <span className="inline-block px-3 py-1 bg-green-500 text-white text-xs font-semibold rounded-full">
                   {eventData.status}
                 </span>
               </div>
-              <h1 className="text-4xl font-bold text-white mb-4">{eventData.title}</h1>
+              <h1 className="text-4xl font-bold text-white mb-4">{eventData.name}</h1>
               <div className="flex items-center gap-6 text-white">
                 <div className="flex items-center gap-2">
                   <Calendar size={18} />
-                  <span>{eventData.date}</span>
+                  <span>{eventDate}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <MapPin size={18} />
-                  <span>{eventData.location}</span>
+                  <span>{eventData.venue}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Users size={18} />
-                  <span>{eventData.attendees} Confirmed</span>
+                  <span>TBD Confirmed</span>
                 </div>
               </div>
             </div>
@@ -156,13 +180,10 @@ export default function EventDetails({ event, onBack }) {
         <div className="mb-8 bg-white p-6 rounded-lg shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold text-gray-700">OVERALL READINESS</h3>
-            <span className="text-lg font-bold text-indigo-600">{eventData.readiness}%</span>
+            <span className="text-lg font-bold text-indigo-600">68%</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${eventData.readiness}%` }}
-            ></div>
+            <div className="bg-indigo-600 h-2 rounded-full transition-all duration-300" style={{ width: '68%' }}></div>
           </div>
         </div>
 
@@ -201,7 +222,7 @@ export default function EventDetails({ event, onBack }) {
                 <div className="bg-white p-6 rounded-lg shadow-sm">
                   <h2 className="text-xl font-semibold mb-6 text-gray-900">Milestone Timeline</h2>
                   <div className="space-y-6">
-                    {eventData.milestones.map((milestone, idx) => (
+                    {mockMilestones.map((milestone, idx) => (
                       <div key={idx} className="flex gap-4">
                         <div className="flex flex-col items-center">
                           <div
@@ -209,7 +230,7 @@ export default function EventDetails({ event, onBack }) {
                               milestone.completed ? 'bg-green-500' : 'bg-gray-300'
                             }`}
                           ></div>
-                          {idx < eventData.milestones.length - 1 && (
+                          {idx < mockMilestones.length - 1 && (
                             <div className="w-1 bg-gray-200 flex-1 my-2" style={{ minHeight: '60px' }}></div>
                           )}
                         </div>
@@ -262,7 +283,7 @@ export default function EventDetails({ event, onBack }) {
             <div className="bg-white p-6 rounded-lg shadow-sm">
               <h3 className="text-lg font-semibold mb-4 text-gray-900">Organizers</h3>
               <div className="space-y-4">
-                {eventData.organizers.map((organizer, idx) => (
+                {mockOrganizers.map((organizer, idx) => (
                   <div key={idx} className="flex items-center gap-3">
                     <img
                       src={organizer.avatar}
@@ -284,10 +305,10 @@ export default function EventDetails({ event, onBack }) {
             {/* RSVP Count Card */}
             <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 p-6 rounded-lg shadow-sm text-white">
               <h3 className="text-sm font-semibold mb-2 opacity-90">RSVP Count</h3>
-              <p className="text-4xl font-bold mb-1">{eventData.rsvpCount}</p>
-              <p className="text-xs uppercase opacity-75">Target: {eventData.rsvpTarget} Seats</p>
+              <p className="text-4xl font-bold mb-1">120</p>
+              <p className="text-xs uppercase opacity-75">Target: 300 Seats</p>
               <div className="mt-4 flex gap-2">
-                {[...Array(Math.ceil(eventData.rsvpCount / 30))].map((_, i) => (
+                {[...Array(4)].map((_, i) => (
                   <div
                     key={i}
                     className="w-6 h-6 rounded-full bg-white/30 border border-white/50"
