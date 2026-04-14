@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
-import { ChevronLeft, Calendar, MapPin, Users, CheckCircle, Clock, AlertCircle, Plus } from 'lucide-react'
+import { ChevronLeft, Calendar, MapPin, Users, CheckCircle, Clock, AlertCircle, Plus, Upload } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import EditEventForm from '../components/event/EditEventForm'
 import AddTaskForm from '../components/task/AddTaskForm'
@@ -21,15 +21,45 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
 
   const [milestones, setMilestones] = useState([])
   const [organizers, setOrganizers] = useState([])
+  const [allProfiles, setAllProfiles] = useState([])
   const [announcementsList, setAnnouncementsList] = useState([])
+  const [filesList, setFilesList] = useState([])
+  const [currentUserId, setCurrentUserId] = useState(null)
+  const [taskStatusSavingId, setTaskStatusSavingId] = useState(null)
+  const [taskStatusError, setTaskStatusError] = useState(null)
+  const [memberRole, setMemberRole] = useState('Member')
+  const [selectedMemberId, setSelectedMemberId] = useState('')
+  const [memberSubmitting, setMemberSubmitting] = useState(false)
+  const [memberError, setMemberError] = useState(null)
+  const [announcementTitle, setAnnouncementTitle] = useState('')
+  const [announcementBody, setAnnouncementBody] = useState('')
+  const [announcementSubmitting, setAnnouncementSubmitting] = useState(false)
+  const [announcementError, setAnnouncementError] = useState(null)
+  const [fileTitle, setFileTitle] = useState('')
+  const [fileUrl, setFileUrl] = useState('')
+  const [fileInput, setFileInput] = useState(null)
+  const [fileSubmitting, setFileSubmitting] = useState(false)
+  const [fileError, setFileError] = useState(null)
   const [extrasLoading, setExtrasLoading] = useState(true)
 
   const eventId = propEventId || paramEventId
 
   useEffect(() => {
+    async function loadCurrentUser() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      setCurrentUserId(user?.id ?? null)
+    }
+    loadCurrentUser()
+  }, [])
+
+  useEffect(() => {
     if (eventId) {
       fetchEventData()
       fetchEventTasks()
+      fetchProfiles()
+      fetchEventFiles()
     }
     // Only reload when navigating to another event
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -46,7 +76,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
           supabase.from('milestones').select('*').eq('event_id', eventId).order('due_date', { ascending: true }),
           supabase
             .from('event_members')
-            .select('id, role, profiles(full_name, avatar_url, email)')
+            .select('id, role, profile_id, user_id, profiles(id, full_name, avatar_url, email)')
             .eq('event_id', eventId),
           supabase
             .from('announcements')
@@ -66,6 +96,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
               const p = row.profiles
               return {
                 id: row.id,
+                profileId: p?.id || row.profile_id || row.user_id || null,
                 name: p?.full_name?.trim() || p?.email || 'Member',
                 role: row.role || 'Member',
                 avatar: p?.avatar_url || null,
@@ -91,6 +122,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
                 const p = byId[uid]
                 return {
                   id: r.id,
+                  profileId: uid || null,
                   name: p?.full_name?.trim() || p?.email || 'Member',
                   role: r.role || 'Member',
                   avatar: p?.avatar_url || null,
@@ -152,6 +184,210 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
     }
   }
 
+  const fetchProfiles = async () => {
+    const { data, error: fetchError } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, avatar_url')
+      .order('full_name', { ascending: true })
+
+    if (!fetchError) {
+      setAllProfiles(data || [])
+    }
+  }
+
+  const fetchEventFiles = async () => {
+    const tableCandidates = ['event_files', 'files', 'attachments']
+
+    for (const table of tableCandidates) {
+      const { data, error: fetchError } = await supabase
+        .from(table)
+        .select('*')
+        .eq('event_id', eventId)
+        .order('created_at', { ascending: false })
+
+      if (!fetchError) {
+        setFilesList(
+          (data || []).map((row, idx) => ({
+            id: row.id || `${table}-${idx}`,
+            name: row.name || row.file_name || row.filename || row.title || 'Untitled file',
+            url: row.url || row.file_url || row.public_url || null,
+            created_at: row.created_at || row.uploaded_at || row.updated_at || null,
+          })),
+        )
+        return
+      }
+    }
+
+    setFilesList([])
+  }
+
+  const toggleTaskDone = async (task, checked) => {
+    const nextStatus = checked ? 'Completed' : 'In Progress'
+    const previousStatus = task.status
+
+    setTaskStatusSavingId(task.id)
+    setTaskStatusError(null)
+    setTasks((prev) => prev.map((item) => (item.id === task.id ? { ...item, status: nextStatus } : item)))
+
+    const { error: updateError } = await supabase
+      .from('tasks')
+      .update({ status: nextStatus })
+      .eq('id', task.id)
+
+    if (updateError) {
+      setTasks((prev) => prev.map((item) => (item.id === task.id ? { ...item, status: previousStatus } : item)))
+      setTaskStatusError(updateError.message || 'Failed to update task status')
+    }
+    setTaskStatusSavingId(null)
+  }
+
+  const addMemberToEvent = async (e) => {
+    e.preventDefault()
+    if (!selectedMemberId) return
+
+    setMemberSubmitting(true)
+    setMemberError(null)
+    try {
+      const basePayload = { event_id: eventId, role: memberRole || 'Member' }
+      let insertError = null
+
+      const tryPayloads = [
+        { ...basePayload, profile_id: selectedMemberId },
+        { ...basePayload, user_id: selectedMemberId },
+      ]
+
+      for (const payload of tryPayloads) {
+        const { error: err } = await supabase.from('event_members').insert(payload)
+        if (!err) {
+          const profile = allProfiles.find((p) => p.id === selectedMemberId)
+          setOrganizers((prev) => [
+            ...prev,
+            {
+              id: `new-${selectedMemberId}`,
+              profileId: selectedMemberId,
+              name: profile?.full_name?.trim() || profile?.email || 'Member',
+              role: memberRole || 'Member',
+              avatar: profile?.avatar_url || null,
+            },
+          ])
+          setSelectedMemberId('')
+          setMemberRole('Member')
+          setMemberSubmitting(false)
+          return
+        }
+        insertError = err
+      }
+
+      throw insertError || new Error('Could not add member')
+    } catch (err) {
+      setMemberError(err.message || 'Failed to add member')
+    } finally {
+      setMemberSubmitting(false)
+    }
+  }
+
+  const addAnnouncement = async (e) => {
+    e.preventDefault()
+    if (!announcementTitle.trim()) return
+
+    setAnnouncementSubmitting(true)
+    setAnnouncementError(null)
+    try {
+      const basePayload = {
+        event_id: eventId,
+        title: announcementTitle.trim(),
+      }
+      if (currentUserId) basePayload.created_by = currentUserId
+
+      const payloads = [
+        { ...basePayload, body: announcementBody.trim() },
+        { ...basePayload, content: announcementBody.trim() },
+      ]
+
+      let insertError = null
+      for (const payload of payloads) {
+        const { data, error: err } = await supabase.from('announcements').insert(payload).select('*').single()
+        if (!err) {
+          setAnnouncementsList((prev) => [data, ...prev])
+          setAnnouncementTitle('')
+          setAnnouncementBody('')
+          setAnnouncementSubmitting(false)
+          return
+        }
+        insertError = err
+      }
+
+      throw insertError || new Error('Could not add announcement')
+    } catch (err) {
+      setAnnouncementError(err.message || 'Failed to add announcement')
+    } finally {
+      setAnnouncementSubmitting(false)
+    }
+  }
+
+  const addFile = async (e) => {
+    e.preventDefault()
+    if (!fileInput && !fileUrl.trim()) return
+
+    setFileSubmitting(true)
+    setFileError(null)
+    try {
+      let resolvedUrl = fileUrl.trim()
+      const resolvedTitle = fileTitle.trim() || fileInput?.name || 'Event file'
+
+      if (fileInput) {
+        const storagePath = `${eventId}/${Date.now()}-${fileInput.name}`
+        const { error: uploadError } = await supabase.storage.from('event-files').upload(storagePath, fileInput)
+        if (uploadError) throw uploadError
+
+        const { data: publicData } = supabase.storage.from('event-files').getPublicUrl(storagePath)
+        resolvedUrl = publicData?.publicUrl || ''
+      }
+
+      const tableCandidates = ['event_files', 'files', 'attachments']
+      const payloads = [
+        { event_id: eventId, name: resolvedTitle, url: resolvedUrl },
+        { event_id: eventId, file_name: resolvedTitle, file_url: resolvedUrl },
+        { event_id: eventId, title: resolvedTitle, url: resolvedUrl },
+      ]
+
+      let inserted = false
+      let lastError = null
+
+      for (const table of tableCandidates) {
+        for (const payload of payloads) {
+          const { error: err } = await supabase.from(table).insert(payload)
+          if (!err) {
+            inserted = true
+            break
+          }
+          lastError = err
+        }
+        if (inserted) break
+      }
+
+      if (!inserted) throw lastError || new Error('Could not save file metadata')
+
+      setFilesList((prev) => [
+        {
+          id: `new-${Date.now()}`,
+          name: resolvedTitle,
+          url: resolvedUrl || null,
+          created_at: new Date().toISOString(),
+        },
+        ...prev,
+      ])
+
+      setFileTitle('')
+      setFileUrl('')
+      setFileInput(null)
+    } catch (err) {
+      setFileError(err.message || 'Failed to add file')
+    } finally {
+      setFileSubmitting(false)
+    }
+  }
+
   const handleBack = () => {
     if (onBack) {
       onBack()
@@ -202,6 +438,8 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
       : extrasLoading
         ? '…'
         : 'No members yet'
+  const existingMemberIds = new Set(organizers.map((o) => o.profileId).filter(Boolean))
+  const availableProfiles = allProfiles.filter((profile) => !existingMemberIds.has(profile.id))
 
   const rsvpCount = eventData.rsvp_count ?? eventData.attendee_count
   const rsvpTarget = eventData.rsvp_target ?? eventData.expected_attendees ?? eventData.capacity
@@ -361,17 +599,27 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
                   <p className="text-gray-600">No tasks yet. Create one to get started!</p>
                 ) : (
                   <div className="space-y-3">
+                    {taskStatusError && <p className="text-sm text-red-600">{taskStatusError}</p>}
                     {tasks.map((task) => (
                       <div
                         key={task.id}
                         onClick={() => setSelectedTask(task)}
                         className="flex items-start gap-4 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition"
                       >
-                        <button type="button" onClick={() => setSelectedTask(task)} className="mt-1">
+                        <div className="mt-0.5 flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-emerald-600"
+                            checked={task.status === 'Completed'}
+                            disabled={taskStatusSavingId === task.id}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => toggleTaskDone(task, e.target.checked)}
+                            aria-label={`Mark ${task.title} as done`}
+                          />
                           {task.status === 'Completed' && <CheckCircle className="text-green-500" size={20} />}
                           {task.status === 'In Progress' && <Clock className="text-blue-500" size={20} />}
                           {task.status === 'Not Started' && <AlertCircle className="text-gray-400" size={20} />}
-                        </button>
+                        </div>
                         <div className="flex-1">
                           <h3 className="font-semibold text-gray-900">{task.title}</h3>
                           <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -414,6 +662,37 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
             {activeTab === 'members' && (
               <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
                 <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Members</h2>
+                <form onSubmit={addMemberToEvent} className="mb-5 space-y-3 rounded-lg border border-gray-200 p-3 sm:p-4">
+                  {memberError && <p className="text-sm text-red-600">{memberError}</p>}
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <select
+                      value={selectedMemberId}
+                      onChange={(e) => setSelectedMemberId(e.target.value)}
+                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm sm:col-span-2"
+                    >
+                      <option value="">Select member</option>
+                      {availableProfiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.full_name || profile.email || 'Unnamed user'}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={memberRole}
+                      onChange={(e) => setMemberRole(e.target.value)}
+                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      placeholder="Role"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={memberSubmitting || !selectedMemberId}
+                    className="inline-flex touch-manipulation items-center justify-center rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60"
+                  >
+                    {memberSubmitting ? 'Adding...' : 'Add Member'}
+                  </button>
+                </form>
                 {extrasLoading && <p className="text-gray-600">Loading…</p>}
                 {!extrasLoading && organizers.length === 0 && (
                   <p className="text-gray-600">No members assigned to this event yet.</p>
@@ -445,13 +724,96 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
             {activeTab === 'files' && (
               <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
                 <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Files</h2>
-                <p className="text-gray-600">File attachments are not configured in this build.</p>
+                <form onSubmit={addFile} className="mb-5 space-y-3 rounded-lg border border-gray-200 p-3 sm:p-4">
+                  {fileError && <p className="text-sm text-red-600">{fileError}</p>}
+                  <input
+                    type="text"
+                    value={fileTitle}
+                    onChange={(e) => setFileTitle(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    placeholder="File title (optional)"
+                  />
+                  <input
+                    type="url"
+                    value={fileUrl}
+                    onChange={(e) => setFileUrl(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    placeholder="Or paste file URL"
+                  />
+                  <input
+                    type="file"
+                    onChange={(e) => setFileInput(e.target.files?.[0] || null)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="submit"
+                    disabled={fileSubmitting || (!fileInput && !fileUrl.trim())}
+                    className="inline-flex touch-manipulation items-center justify-center gap-2 rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60"
+                  >
+                    <Upload size={16} />
+                    {fileSubmitting ? 'Adding file...' : 'Add File'}
+                  </button>
+                </form>
+
+                {filesList.length === 0 ? (
+                  <p className="text-gray-600">No files added yet.</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {filesList.map((file) => (
+                      <li key={file.id} className="rounded-lg border border-gray-200 p-3">
+                        <p className="font-medium text-gray-900">{file.name}</p>
+                        {file.url ? (
+                          <a
+                            href={file.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-1 inline-block break-all text-sm text-indigo-600 hover:text-indigo-700"
+                          >
+                            Open file
+                          </a>
+                        ) : (
+                          <p className="mt-1 text-sm text-gray-500">No public URL available</p>
+                        )}
+                        {file.created_at && (
+                          <p className="mt-1 text-xs text-gray-400">{new Date(file.created_at).toLocaleString()}</p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
 
             {activeTab === 'announcements' && (
               <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
                 <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Announcements</h2>
+                <form
+                  onSubmit={addAnnouncement}
+                  className="mb-5 space-y-3 rounded-lg border border-gray-200 p-3 sm:p-4"
+                >
+                  {announcementError && <p className="text-sm text-red-600">{announcementError}</p>}
+                  <input
+                    type="text"
+                    value={announcementTitle}
+                    onChange={(e) => setAnnouncementTitle(e.target.value)}
+                    placeholder="Announcement title"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                  <textarea
+                    value={announcementBody}
+                    onChange={(e) => setAnnouncementBody(e.target.value)}
+                    placeholder="What should everyone know?"
+                    rows={3}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="submit"
+                    disabled={announcementSubmitting || !announcementTitle.trim()}
+                    className="inline-flex touch-manipulation items-center justify-center rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60"
+                  >
+                    {announcementSubmitting ? 'Posting...' : 'Post Announcement'}
+                  </button>
+                </form>
                 {extrasLoading && <p className="text-gray-600">Loading…</p>}
                 {!extrasLoading && announcementsList.length === 0 && (
                   <p className="text-gray-600">No announcements for this event.</p>
