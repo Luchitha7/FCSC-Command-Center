@@ -366,31 +366,27 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
     setAnnouncementSubmitting(true)
     setAnnouncementError(null)
     try {
-      const basePayload = {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      const authorId = user?.id || currentUserId
+      if (!authorId) {
+        throw new Error('You must be logged in to post announcements')
+      }
+
+      const payload = {
         event_id: eventId,
         title: announcementTitle.trim(),
-      }
-      if (currentUserId) basePayload.created_by = currentUserId
-
-      const payloads = [
-        { ...basePayload, body: announcementBody.trim() },
-        { ...basePayload, content: announcementBody.trim() },
-      ]
-
-      let insertError = null
-      for (const payload of payloads) {
-        const { data, error: err } = await supabase.from('announcements').insert(payload).select('*').single()
-        if (!err) {
-          setAnnouncementsList((prev) => [data, ...prev])
-          setAnnouncementTitle('')
-          setAnnouncementBody('')
-          setAnnouncementSubmitting(false)
-          return
-        }
-        insertError = err
+        body: announcementBody.trim(),
+        posted_by: authorId,
       }
 
-      throw insertError || new Error('Could not add announcement')
+      const { data, error: insertError } = await supabase.from('announcements').insert(payload).select('*').single()
+      if (insertError) throw insertError
+
+      setAnnouncementsList((prev) => [data, ...prev])
+      setAnnouncementTitle('')
+      setAnnouncementBody('')
     } catch (err) {
       setAnnouncementError(err.message || 'Failed to add announcement')
     } finally {
@@ -561,29 +557,14 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
     setAnnouncementActionId(announcementId)
     setAnnouncementError(null)
     try {
-      const payloads = [
-        { title: nextTitle, body: nextBody },
-        { title: nextTitle, content: nextBody },
-        { title: nextTitle, body: nextBody, content: nextBody },
-      ]
-      let updatedRecord = null
-      let updateError = null
+      const { data: updatedRecord, error: updateError } = await supabase
+        .from('announcements')
+        .update({ title: nextTitle, body: nextBody })
+        .eq('id', announcementId)
+        .select('*')
+        .single()
 
-      for (const payload of payloads) {
-        const { data, error: err } = await supabase
-          .from('announcements')
-          .update(payload)
-          .eq('id', announcementId)
-          .select('*')
-          .single()
-        if (!err) {
-          updatedRecord = data
-          break
-        }
-        updateError = err
-      }
-
-      if (!updatedRecord) throw updateError || new Error('Could not update announcement')
+      if (updateError) throw updateError
 
       setAnnouncementsList((prev) => prev.map((a) => (a.id === announcementId ? updatedRecord : a)))
       cancelAnnouncementEdit()
