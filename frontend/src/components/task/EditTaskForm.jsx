@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { X, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
-export default function EditTaskForm({ task, onClose, onTaskUpdated }) {
+export default function EditTaskForm({ task, onClose, onTaskUpdated, profiles = [] }) {
   const [formData, setFormData] = useState({
     title: task.title,
     priority: task.priority,
     status: task.status,
     due_date: task.due_date || '',
+    assigned_to: task.assigned_to || '',
   })
   const [loading, setLoading] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -40,6 +41,7 @@ export default function EditTaskForm({ task, onClose, onTaskUpdated }) {
           priority: formData.priority,
           status: formData.status,
           due_date: formData.due_date || null,
+          assigned_to: formData.assigned_to || null,
         })
         .eq('id', task.id)
 
@@ -159,6 +161,25 @@ export default function EditTaskForm({ task, onClose, onTaskUpdated }) {
               onChange={handleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Assignee
+            </label>
+            <select
+              name="assigned_to"
+              value={formData.assigned_to}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">Unassigned</option>
+              {profiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.full_name || profile.email || 'Unnamed member'}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="flex flex-col gap-2 border-t border-gray-200 pt-4 sm:flex-row sm:flex-wrap sm:gap-3">

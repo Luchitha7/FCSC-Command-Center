@@ -13,6 +13,8 @@ export default function Tasks() {
   const [error, setError] = useState(null)
   const [selectedTask, setSelectedTask] = useState(null)
   const [events, setEvents] = useState({})
+  const [profilesById, setProfilesById] = useState({})
+  const [allProfiles, setAllProfiles] = useState([])
   const [allEvents, setAllEvents] = useState([])
   const [selectedEventId, setSelectedEventId] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
@@ -22,6 +24,7 @@ export default function Tasks() {
   useEffect(() => {
     fetchTasks()
     fetchAllEvents()
+    fetchAllProfiles()
   }, [])
 
   const fetchAllEvents = async () => {
@@ -69,6 +72,24 @@ export default function Tasks() {
       console.error('Error fetching tasks:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchAllProfiles = async () => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .order('full_name', { ascending: true })
+      if (fetchError) throw fetchError
+
+      const rows = data || []
+      setAllProfiles(rows)
+      setProfilesById(
+        Object.fromEntries(rows.map((profile) => [profile.id, profile.full_name || profile.email || 'Unknown'])),
+      )
+    } catch (err) {
+      console.error('Error fetching profiles:', err)
     }
   }
 
@@ -179,6 +200,9 @@ export default function Tasks() {
                       Event
                     </th>
                     <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-900 sm:px-6 sm:py-3 sm:text-sm">
+                      Assignee
+                    </th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-900 sm:px-6 sm:py-3 sm:text-sm">
                       Status
                     </th>
                     <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-900 sm:px-6 sm:py-3 sm:text-sm">
@@ -207,6 +231,9 @@ export default function Tasks() {
                       </td>
                       <td className="px-3 py-3 text-xs text-gray-600 sm:px-6 sm:py-4 sm:text-sm">
                         {events[task.event_id] || 'Unknown'}
+                      </td>
+                      <td className="px-3 py-3 text-xs text-gray-600 sm:px-6 sm:py-4 sm:text-sm">
+                        {task.assigned_to ? profilesById[task.assigned_to] || 'Unknown' : 'Unassigned'}
                       </td>
                       <td className="px-3 py-3 sm:px-6 sm:py-4">
                         <span
@@ -254,6 +281,7 @@ export default function Tasks() {
         {showAddForm && selectedEventId && (
           <AddTaskForm
             eventId={selectedEventId}
+            profiles={allProfiles}
             onClose={() => {
               setShowAddForm(false)
               setSelectedEventId('')
@@ -269,6 +297,7 @@ export default function Tasks() {
         {selectedTask && (
           <EditTaskForm
             task={selectedTask}
+            profiles={allProfiles}
             onClose={() => setSelectedTask(null)}
             onTaskUpdated={() => {
               fetchTasks()

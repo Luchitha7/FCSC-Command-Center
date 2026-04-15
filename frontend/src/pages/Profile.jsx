@@ -15,6 +15,7 @@ import EcShell from '../components/layout/EcShell'
 import LogoutButton from '../components/LogoutButton'
 import EditProfileModal from '../components/profile/EditProfileModal'
 import { supabase } from '../lib/supabase'
+import { downloadCsv, toCsv } from '../lib/csvExport'
 import { displayNameFromUser, initialsFromDisplayName } from '../lib/userDisplay'
 import { useAuthProfile } from '../hooks/useAuthProfile'
 import { getNavItems } from '../hooks/useNavItems'
@@ -31,6 +32,9 @@ export default function Profile() {
   const [completedTasks, setCompletedTasks] = useState(0)
   const [openTasks, setOpenTasks] = useState(0)
   const [recent, setRecent] = useState([])
+  const [allHostedEvents, setAllHostedEvents] = useState([])
+  const [allMyTasks, setAllMyTasks] = useState([])
+  const [exportError, setExportError] = useState('')
   const [loading, setLoading] = useState(true)
 
   const displayName = useMemo(
@@ -56,8 +60,14 @@ export default function Profile() {
 
         const { data: myTasks } = await supabase
           .from('tasks')
-          .select('id, status, title, created_at')
+          .select('id, status, title, priority, due_date, event_id, created_at')
           .or(`assigned_to.eq.${user.id},created_by.eq.${user.id}`)
+
+        const { data: hostedEventsForExport } = await supabase
+          .from('events')
+          .select('id, name, venue, date, type, status, created_at')
+          .eq('created_by', user.id)
+          .order('date', { ascending: false })
 
         const { data: orgEvents } = await supabase
           .from('events')
@@ -93,6 +103,8 @@ export default function Profile() {
         setCompletedTasks(done)
         setOpenTasks(open)
         setRecent(activity)
+        setAllHostedEvents(hostedEventsForExport || [])
+        setAllMyTasks(tasks)
       } catch (e) {
         console.error(e)
       } finally {
@@ -117,6 +129,58 @@ export default function Profile() {
   const handleProfileSaved = async () => {
     await refetchProfile()
     setSaveSuccess(true)
+  }
+
+  const handleExportRecords = () => {
+    setExportError('')
+
+    if (allHostedEvents.length === 0 && allMyTasks.length === 0) {
+      setExportError('No hosted events or tasks found to export yet.')
+      return
+    }
+
+    const rows = [
+      ...allHostedEvents.map((event) => ({
+        recordType: 'Event',
+        title: event.name || '',
+        status: event.status || '',
+        priority: '',
+        dueDate: event.date || '',
+        venue: event.venue || '',
+        eventType: event.type || '',
+        linkedEventId: event.id || '',
+        createdAt: event.created_at || '',
+      })),
+      ...allMyTasks.map((task) => ({
+        recordType: 'Task',
+        title: task.title || '',
+        status: task.status || '',
+        priority: task.priority || '',
+        dueDate: task.due_date || '',
+        venue: '',
+        eventType: '',
+        linkedEventId: task.event_id || '',
+        createdAt: task.created_at || '',
+      })),
+    ]
+
+    const csv = toCsv(
+      [
+        { key: 'recordType', label: 'Record Type' },
+        { key: 'title', label: 'Title' },
+        { key: 'status', label: 'Status' },
+        { key: 'priority', label: 'Priority' },
+        { key: 'dueDate', label: 'Due/Event Date' },
+        { key: 'venue', label: 'Venue' },
+        { key: 'eventType', label: 'Event Type' },
+        { key: 'linkedEventId', label: 'Linked Event ID' },
+        { key: 'createdAt', label: 'Created At' },
+      ],
+      rows,
+    )
+
+    const stamp = new Date().toISOString().slice(0, 10)
+    downloadCsv(`command-center-records-${stamp}.csv`, csv)
   }
 
   const profileBrand = (
@@ -153,6 +217,11 @@ export default function Profile() {
               role="status"
             >
               Your profile was updated successfully.
+            </div>
+          )}
+          {exportError && (
+            <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800">
+              {exportError}
             </div>
           )}
 
@@ -362,11 +431,12 @@ export default function Profile() {
                 </p>
                 <button
                   type="button"
-                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-indigo-700 opacity-80"
-                  disabled
+                  onClick={handleExportRecords}
+                  disabled={loading}
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-bold uppercase tracking-[0.14em] text-indigo-700 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   <Download className="h-4 w-4" />
-                  Coming soon
+                  {loading ? 'Preparing...' : 'Export CSV'}
                 </button>
               </article>
 
