@@ -128,6 +128,11 @@ export default function Tasks() {
     }
   }
 
+  const filteredTasks = selectedEventId
+    ? tasks.filter((task) => String(task.event_id) === String(selectedEventId))
+    : tasks
+  const selectedEventName = selectedEventId ? allEvents.find((event) => event.id === selectedEventId)?.name : ''
+
   return (
     <EcShell navItems={navItems} footer={footerContent}>
       <div className="mx-auto max-w-6xl">
@@ -183,11 +188,15 @@ export default function Tasks() {
         {loading && <p className="text-gray-600">Loading tasks...</p>}
         {error && <p className="text-red-600">Error: {error}</p>}
 
-        {!loading && tasks.length === 0 && (
-          <p className="text-gray-600">No tasks found. Create one by opening an event!</p>
+        {!loading && filteredTasks.length === 0 && (
+          <p className="text-gray-600">
+            {selectedEventId
+              ? `No tasks found for ${selectedEventName || 'the selected event'}.`
+              : 'No tasks found. Create one by opening an event!'}
+          </p>
         )}
 
-        {!loading && tasks.length > 0 && (
+        {!loading && filteredTasks.length > 0 && (
           <div className="grid gap-4">
             <div className="-mx-1 overflow-x-auto rounded-lg border border-gray-200 sm:mx-0">
               <table className="w-full min-w-[720px]">
@@ -217,7 +226,7 @@ export default function Tasks() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {tasks.map((task) => (
+                  {filteredTasks.map((task) => (
                     <tr
                       key={task.id}
                       className="cursor-pointer transition hover:bg-gray-50 touch-manipulation"
