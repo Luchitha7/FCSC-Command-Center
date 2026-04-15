@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { CalendarDays, ClipboardCheck, Flag, Trash2, UserCircle2, X } from 'lucide-react'
+import { CalendarDays, ClipboardCheck, Flag, Plus, Trash2, UserCircle2, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { normalizeSubtasks, serializeSubtasksForDb } from '../../lib/taskSubtasks'
 
 export default function EditTaskForm({ task, onClose, onTaskUpdated, profiles = [] }) {
   const [formData, setFormData] = useState({
@@ -13,8 +14,27 @@ export default function EditTaskForm({ task, onClose, onTaskUpdated, profiles = 
   const [loading, setLoading] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [subtasks, setSubtasks] = useState(normalizeSubtasks(task.subtasks))
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
   const statusOptions = ['Not Started', 'In Progress', 'Completed']
   const priorityOptions = ['Low', 'Medium', 'High']
+
+  const addSubtask = () => {
+    const title = newSubtaskTitle.trim()
+    if (!title) return
+    setSubtasks((prev) => [...prev, { id: `sub-${Date.now()}`, title, done: false }])
+    setNewSubtaskTitle('')
+  }
+
+  const removeSubtask = (subtaskId) => {
+    setSubtasks((prev) => prev.filter((item) => item.id !== subtaskId))
+  }
+
+  const toggleSubtaskDone = (subtaskId) => {
+    setSubtasks((prev) =>
+      prev.map((item) => (item.id === subtaskId ? { ...item, done: !item.done } : item)),
+    )
+  }
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -36,17 +56,17 @@ export default function EditTaskForm({ task, onClose, onTaskUpdated, profiles = 
         return
       }
 
-      const { error: updateError } = await supabase
-        .from('tasks')
-        .update({
-          title: formData.title,
-          priority: formData.priority,
-          status: formData.status,
-          due_date: formData.due_date || null,
-          assigned_to: formData.assigned_to || null,
-        })
-        .eq('id', task.id)
+      const normalizedSubtasks = normalizeSubtasks(subtasks)
+      const basePayload = {
+        title: formData.title,
+        priority: formData.priority,
+        status: formData.status,
+        due_date: formData.due_date || null,
+        assigned_to: formData.assigned_to || null,
+        subtasks: serializeSubtasksForDb(normalizedSubtasks),
+      }
 
+      const { error: updateError } = await supabase.from('tasks').update(basePayload).eq('id', task.id)
       if (updateError) throw updateError
 
       console.log('Task updated successfully')
@@ -171,6 +191,61 @@ export default function EditTaskForm({ task, onClose, onTaskUpdated, profiles = 
                 ))}
               </div>
             </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 p-3 sm:p-4">
+            <label className="mb-2 block text-sm font-medium text-slate-700">Subtasks</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newSubtaskTitle}
+                onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    addSubtask()
+                  }
+                }}
+                placeholder="e.g., Confirm sponsor assets"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <button
+                type="button"
+                onClick={addSubtask}
+                className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100"
+              >
+                <Plus className="h-4 w-4" />
+                Add
+              </button>
+            </div>
+            {subtasks.length > 0 ? (
+              <ul className="mt-3 space-y-2">
+                {subtasks.map((subtask) => (
+                  <li key={subtask.id} className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={subtask.done === true}
+                      onChange={() => toggleSubtaskDone(subtask.id)}
+                      className="h-4 w-4 accent-emerald-600"
+                      aria-label={`Toggle ${subtask.title}`}
+                    />
+                    <span className={`flex-1 text-sm ${subtask.done ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                      {subtask.title}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeSubtask(subtask.id)}
+                      className="rounded p-1 text-rose-600 hover:bg-rose-50"
+                      aria-label={`Remove subtask ${subtask.title}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-xs text-slate-500">No subtasks yet.</p>
+            )}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

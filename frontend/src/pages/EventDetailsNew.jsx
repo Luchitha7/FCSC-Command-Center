@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import EditEventForm from '../components/event/EditEventForm'
 import AddTaskForm from '../components/task/AddTaskForm'
 import EditTaskForm from '../components/task/EditTaskForm'
+import { mergeTasksWithSubtasks } from '../lib/taskSubtasks'
 
 export default function EventDetails({ eventId: propEventId, onBack }) {
   const { id: paramEventId } = useParams()
@@ -46,6 +47,10 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
   const [fileSubmitting, setFileSubmitting] = useState(false)
   const [fileError, setFileError] = useState(null)
   const [extrasLoading, setExtrasLoading] = useState(true)
+  const [eventHeadPoint, setEventHeadPoint] = useState('')
+  const [eventHeadDraft, setEventHeadDraft] = useState('')
+  const [eventHeadSaving, setEventHeadSaving] = useState(false)
+  const [eventHeadError, setEventHeadError] = useState(null)
   const memberRoleOptions = ['Member', 'Lead', 'Coordinator', 'Volunteer']
 
   const eventId = propEventId || paramEventId
@@ -175,6 +180,27 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
     }
   }
 
+  useEffect(() => {
+    if (!eventId) return
+    const fromEvent =
+      eventData?.event_head_point ||
+      eventData?.head_point ||
+      eventData?.event_head ||
+      eventData?.point_of_contact ||
+      ''
+    if (fromEvent) {
+      setEventHeadPoint(fromEvent)
+      setEventHeadDraft(fromEvent)
+      return
+    }
+
+    if (typeof window !== 'undefined') {
+      const stored = window.localStorage.getItem(`fcsc_event_head_point_${eventId}`) || ''
+      setEventHeadPoint(stored)
+      setEventHeadDraft(stored)
+    }
+  }, [eventData, eventId])
+
   const fetchEventTasks = async () => {
     try {
       const { data, error: fetchError } = await supabase
@@ -184,7 +210,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
         .order('due_date', { ascending: true, nullsFirst: false })
 
       if (fetchError) throw fetchError
-      setTasks(data || [])
+      setTasks(mergeTasksWithSubtasks(data || []))
     } catch (err) {
       console.error('Error fetching tasks:', err)
     }
@@ -493,6 +519,16 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
 
   const rsvpCount = eventData.rsvp_count ?? eventData.attendee_count
   const rsvpTarget = eventData.rsvp_target ?? eventData.expected_attendees ?? eventData.capacity
+  const eventHeadNameForPreview = eventHeadDraft.trim() || eventHeadPoint.trim()
+  const eventHeadInitials = eventHeadNameForPreview
+    ? eventHeadNameForPreview
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((part) => part[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+    : 'HP'
   const canManageAnnouncements = (() => {
     if (!currentUserId) return false
     if (eventData?.created_by && eventData.created_by === currentUserId) return true
@@ -576,31 +612,67 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
     setAnnouncementActionId(null)
   }
 
+  const saveEventHeadPoint = async () => {
+    const nextName = eventHeadDraft.trim()
+    setEventHeadSaving(true)
+    setEventHeadError(null)
+    try {
+      const columnCandidates = ['event_head_point', 'head_point', 'event_head', 'point_of_contact']
+      let savedToDb = false
+      let lastError = null
+
+      for (const column of columnCandidates) {
+        const { error: updateError } = await supabase.from('events').update({ [column]: nextName || null }).eq('id', eventId)
+        if (!updateError) {
+          savedToDb = true
+          setEventData((prev) => (prev ? { ...prev, [column]: nextName || null } : prev))
+          break
+        }
+        lastError = updateError
+      }
+
+      // Fallback if DB schema does not yet include a dedicated column.
+      if (!savedToDb && typeof window !== 'undefined') {
+        window.localStorage.setItem(`fcsc_event_head_point_${eventId}`, nextName)
+      }
+
+      if (!savedToDb && lastError && typeof window === 'undefined') {
+        throw lastError
+      }
+
+      setEventHeadPoint(nextName)
+    } catch (err) {
+      setEventHeadError(err.message || 'Failed to save Event Head Point')
+    } finally {
+      setEventHeadSaving(false)
+    }
+  }
+
   return (
-    <div className="min-h-screen overflow-x-hidden bg-gray-50">
-      <div className="relative min-h-[14rem] bg-gradient-to-r from-purple-600 to-purple-800 pb-8 sm:h-64 sm:pb-0">
+    <div className="min-h-screen overflow-x-hidden bg-slate-100">
+      <div className="relative overflow-hidden bg-gradient-to-br from-indigo-700 via-violet-700 to-purple-800 pb-14">
         <button
           type="button"
           onClick={handleBack}
-          className="absolute left-3 top-3 z-10 flex touch-manipulation items-center gap-2 rounded-lg px-3 py-2 text-sm text-white transition hover:bg-white/20 sm:left-4 sm:top-4"
+          className="absolute left-3 top-3 z-10 flex touch-manipulation items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white backdrop-blur transition hover:bg-white/20 sm:left-6 sm:top-6"
         >
           <ChevronLeft size={20} />
           Back
         </button>
 
-        <div className="absolute inset-0 opacity-30">
-          <div className="absolute right-10 top-10 h-24 w-24 rounded-full bg-purple-500 blur-3xl sm:right-20 sm:h-32 sm:w-32"></div>
-          <div className="absolute bottom-6 left-4 h-28 w-28 rounded-full bg-purple-700 blur-3xl sm:bottom-10 sm:left-10 sm:h-40 sm:w-40"></div>
+        <div className="absolute inset-0 opacity-40">
+          <div className="absolute right-12 top-12 h-32 w-32 rounded-full bg-indigo-400 blur-3xl sm:right-28 sm:h-44 sm:w-44"></div>
+          <div className="absolute bottom-8 left-6 h-36 w-36 rounded-full bg-purple-500 blur-3xl sm:bottom-12 sm:left-16 sm:h-52 sm:w-52"></div>
         </div>
 
-        <div className="relative px-4 pb-6 pt-16 sm:px-6 sm:pt-24">
+        <div className="relative mx-auto max-w-7xl px-4 pb-6 pt-20 sm:px-6 sm:pt-24">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <div className="mb-3 flex flex-wrap gap-2 sm:mb-4">
-                <span className="inline-block rounded-full bg-purple-500 px-2.5 py-1 text-xs font-semibold text-white sm:px-3">
+                <span className="inline-block rounded-full border border-white/20 bg-white/15 px-2.5 py-1 text-xs font-semibold text-white sm:px-3">
                   {eventData.type}
                 </span>
-                <span className="inline-block rounded-full bg-green-500 px-2.5 py-1 text-xs font-semibold text-white sm:px-3">
+                <span className="inline-block rounded-full border border-emerald-200/30 bg-emerald-500/80 px-2.5 py-1 text-xs font-semibold text-white sm:px-3">
                   {eventData.status}
                 </span>
               </div>
@@ -625,7 +697,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
             <button
               type="button"
               onClick={() => setShowEditForm(true)}
-              className="w-full touch-manipulation rounded-lg bg-indigo-600 px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-indigo-700 sm:w-auto sm:self-start sm:px-6"
+              className="w-full touch-manipulation rounded-xl bg-white px-4 py-2.5 text-center text-sm font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-50 sm:w-auto sm:self-start sm:px-6"
             >
               Manage Event
             </button>
@@ -633,30 +705,30 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
-        <div className="mb-6 rounded-lg bg-white p-4 shadow-sm sm:mb-8 sm:p-6">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-gray-700">OVERALL READINESS</h3>
+      <div className="mx-auto -mt-7 max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        <div className="mb-6 rounded-2xl border border-indigo-100 bg-white p-4 shadow-lg shadow-indigo-100/40 sm:mb-8 sm:p-6">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Overall Readiness</h3>
             <span className="text-lg font-bold text-indigo-600">{readiness}%</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="h-2 w-full rounded-full bg-slate-200">
             <div
-              className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+              className="h-2 rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-300"
               style={{ width: `${readiness}%` }}
             ></div>
           </div>
         </div>
 
-        <div className="mb-8 border-b border-gray-200">
-          <div className="flex gap-8 overflow-x-auto">
+        <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+          <div className="flex gap-2 overflow-x-auto">
             {tabs.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`pb-4 px-1 capitalize font-medium text-sm transition-colors whitespace-nowrap ${
+                className={`rounded-xl px-3 py-2 capitalize text-sm font-semibold transition whitespace-nowrap sm:px-4 ${
                   activeTab === tab
-                    ? 'text-indigo-600 border-b-2 border-indigo-600'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
                 {tab}
@@ -669,14 +741,14 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
           <div className="space-y-6 sm:space-y-8 lg:col-span-2">
             {activeTab === 'overview' && (
               <>
-                <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                   <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Event Description</h2>
                   <p className="text-gray-600 leading-relaxed whitespace-pre-wrap">
                     {eventData.description || 'No description provided.'}
                   </p>
                 </div>
 
-                <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                   <h2 className="mb-4 text-lg font-semibold text-gray-900 sm:mb-6 sm:text-xl">Milestone Timeline</h2>
                   {extrasLoading && <p className="text-gray-600 text-sm">Loading milestones…</p>}
                   {!extrasLoading && milestones.length === 0 && (
@@ -714,7 +786,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
             )}
 
             {activeTab === 'tasks' && (
-              <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                 <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h2 className="text-lg font-semibold text-gray-900 sm:text-xl">Tasks</h2>
                   <button
@@ -736,7 +808,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
                       <div
                         key={task.id}
                         onClick={() => setSelectedTask(task)}
-                        className="flex items-start gap-4 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition"
+                        className="cursor-pointer rounded-xl border border-slate-200 bg-slate-50/70 p-4 transition hover:border-indigo-200 hover:bg-indigo-50/40"
                       >
                         <div className="mt-0.5 flex items-center gap-2">
                           <input
@@ -785,6 +857,12 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
                             <span className="text-xs text-gray-600">
                               Assignee: {task.assigned_to ? assigneeNameById[task.assigned_to] || 'Unknown' : 'Unassigned'}
                             </span>
+                            {Array.isArray(task.subtasks) && task.subtasks.length > 0 && (
+                              <span className="text-xs text-gray-600">
+                                Subtasks: {task.subtasks.filter((item) => item.done === true).length}/{task.subtasks.length}{' '}
+                                done
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -795,9 +873,9 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
             )}
 
             {activeTab === 'members' && (
-              <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                 <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Members</h2>
-                <form onSubmit={addMemberToEvent} className="mb-5 space-y-3 rounded-lg border border-gray-200 p-3 sm:p-4">
+                <form onSubmit={addMemberToEvent} className="mb-5 space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4">
                   {memberError && <p className="text-sm text-red-600">{memberError}</p>}
                   <div className="grid gap-3 sm:grid-cols-3">
                     <select
@@ -879,9 +957,9 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
             )}
 
             {activeTab === 'files' && (
-              <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                 <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Files</h2>
-                <form onSubmit={addFile} className="mb-5 space-y-3 rounded-lg border border-gray-200 p-3 sm:p-4">
+                <form onSubmit={addFile} className="mb-5 space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4">
                   {fileError && <p className="text-sm text-red-600">{fileError}</p>}
                   <input
                     type="text"
@@ -917,7 +995,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
                 ) : (
                   <ul className="space-y-3">
                     {filesList.map((file) => (
-                      <li key={file.id} className="rounded-lg border border-gray-200 p-3">
+                      <li key={file.id} className="rounded-xl border border-slate-200 p-3">
                         <p className="font-medium text-gray-900">{file.name}</p>
                         {file.url ? (
                           <a
@@ -942,12 +1020,12 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
             )}
 
             {activeTab === 'announcements' && (
-              <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                 <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Announcements</h2>
                 {canManageAnnouncements ? (
                   <form
                     onSubmit={addAnnouncement}
-                    className="mb-5 space-y-3 rounded-lg border border-gray-200 p-3 sm:p-4"
+                    className="mb-5 space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4"
                   >
                     {announcementError && <p className="text-sm text-red-600">{announcementError}</p>}
                     <input
@@ -1059,45 +1137,59 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
           </div>
 
           <div className="space-y-6 lg:space-y-6">
-            <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
-              <h3 className="mb-3 text-base font-semibold text-gray-900 sm:mb-4 sm:text-lg">Organizers</h3>
-              {extrasLoading && <p className="text-gray-600 text-sm">Loading…</p>}
-              {!extrasLoading && organizers.length === 0 && (
-                <p className="text-gray-600 text-sm">No organizers listed.</p>
-              )}
-              {!extrasLoading && organizers.length > 0 && (
-                <div className="space-y-4">
-                  {organizers.map((organizer, idx) => (
-                    <div key={idx} className="flex items-center gap-3">
-                      {organizer.avatar ? (
-                        <img
-                          src={organizer.avatar}
-                          alt=""
-                          className="w-10 h-10 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 grid place-items-center text-xs font-bold">
-                          {organizer.name
-                            .split(/\s+/)
-                            .filter(Boolean)
-                            .map((p) => p[0])
-                            .join('')
-                            .slice(0, 2)
-                            .toUpperCase()}
-                        </div>
-                      )}
-                      <div>
-                        <p className="font-semibold text-sm text-gray-900">{organizer.name}</p>
-                        <p className="text-xs text-gray-600 uppercase">{organizer.role}</p>
-                      </div>
-                    </div>
-                  ))}
+            <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
+              <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-4 text-white sm:px-6">
+                <div className="flex items-center gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold sm:text-lg">Event Head Point</h3>
+                  </div>
                 </div>
+              </div>
+
+              <div className="space-y-4 p-4 sm:p-6">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Preview</p>
+                  <div className="mt-2 flex items-center gap-3">
+                    <div className="grid h-10 w-10 place-items-center rounded-full bg-violet-100 text-xs font-bold text-violet-700">
+                      {eventHeadInitials}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{eventHeadNameForPreview || 'No name set'}</p>
+                      <p className="text-xs text-slate-500">
+                        {eventHeadNameForPreview ? 'Head point selected' : 'Add one person as event lead'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+              {eventHeadError && (
+                <p className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  {eventHeadError}
+                </p>
               )}
+              <input
+                type="text"
+                value={eventHeadDraft}
+                onChange={(e) => setEventHeadDraft(e.target.value)}
+                placeholder="Type the responsible person's name"
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+              <button
+                type="button"
+                onClick={saveEventHeadPoint}
+                disabled={eventHeadSaving || eventHeadDraft.trim() === eventHeadPoint}
+                className="w-full rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:from-violet-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {eventHeadSaving ? 'Saving head point...' : 'Update Event Head Point'}
+              </button>
+              {eventHeadPoint && !eventHeadError && (
+                <p className="mt-2 text-xs text-slate-500">Current: {eventHeadPoint}</p>
+              )}
+              </div>
             </div>
 
             {(rsvpCount != null || rsvpTarget != null) && (
-              <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 p-6 rounded-lg shadow-sm text-white">
+              <div className="rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-700 p-6 text-white shadow-md shadow-indigo-200/50">
                 <h3 className="text-sm font-semibold mb-2 opacity-90">RSVP</h3>
                 <p className="text-4xl font-bold mb-1">{rsvpCount ?? '—'}</p>
                 {rsvpTarget != null && (

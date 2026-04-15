@@ -6,6 +6,7 @@ import EditTaskForm from '../components/task/EditTaskForm'
 import EcShell from '../components/layout/EcShell'
 import LogoutButton from '../components/LogoutButton'
 import { getNavItems } from '../hooks/useNavItems'
+import { mergeTasksWithSubtasks } from '../lib/taskSubtasks'
 
 export default function Tasks() {
   const [tasks, setTasks] = useState([])
@@ -51,7 +52,7 @@ export default function Tasks() {
 
       if (fetchError) throw fetchError
 
-      setTasks(data || [])
+      setTasks(mergeTasksWithSubtasks(data || []))
 
       // Fetch event names for display
       if (data && data.length > 0) {
@@ -126,6 +127,13 @@ export default function Tasks() {
       default:
         return 'bg-gray-100 text-gray-700'
     }
+  }
+
+  const subtaskSummary = (task) => {
+    const list = Array.isArray(task.subtasks) ? task.subtasks : []
+    if (!list.length) return 'No subtasks'
+    const doneCount = list.filter((item) => item.done === true).length
+    return `${doneCount}/${list.length} done`
   }
 
   const filteredTasks = selectedEventId
@@ -221,6 +229,9 @@ export default function Tasks() {
                       Due Date
                     </th>
                     <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-900 sm:px-6 sm:py-3 sm:text-sm">
+                      Subtasks
+                    </th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-900 sm:px-6 sm:py-3 sm:text-sm">
                       Action
                     </th>
                   </tr>
@@ -266,6 +277,9 @@ export default function Tasks() {
                         {task.due_date
                           ? new Date(task.due_date).toLocaleDateString()
                           : '—'}
+                      </td>
+                      <td className="px-3 py-3 text-xs text-gray-600 sm:px-6 sm:py-4 sm:text-sm">
+                        {subtaskSummary(task)}
                       </td>
                       <td className="px-3 py-3 sm:px-6 sm:py-4">
                         <button

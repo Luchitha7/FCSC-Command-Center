@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { CalendarDays, ClipboardPlus, Flag, UserCircle2, X } from 'lucide-react'
+import { CalendarDays, ClipboardPlus, Flag, Plus, Trash2, UserCircle2, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { normalizeSubtasks, serializeSubtasksForDb } from '../../lib/taskSubtasks'
 
 export default function AddTaskForm({ eventId, onClose, onTaskAdded, profiles = [] }) {
   const [formData, setFormData] = useState({
@@ -12,8 +13,21 @@ export default function AddTaskForm({ eventId, onClose, onTaskAdded, profiles = 
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [subtasks, setSubtasks] = useState([])
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
   const statusOptions = ['Not Started', 'In Progress', 'Completed']
   const priorityOptions = ['Low', 'Medium', 'High']
+
+  const addSubtask = () => {
+    const title = newSubtaskTitle.trim()
+    if (!title) return
+    setSubtasks((prev) => [...prev, { id: `sub-${Date.now()}`, title, done: false }])
+    setNewSubtaskTitle('')
+  }
+
+  const removeSubtask = (subtaskId) => {
+    setSubtasks((prev) => prev.filter((item) => item.id !== subtaskId))
+  }
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -42,18 +56,19 @@ export default function AddTaskForm({ eventId, onClose, onTaskAdded, profiles = 
         return
       }
 
-      const { error: insertError } = await supabase.from('tasks').insert([
-        {
-          event_id: eventId,
-          title: formData.title,
-          priority: formData.priority,
-          status: formData.status,
-          due_date: formData.due_date || null,
-          assigned_to: formData.assigned_to || null,
-          created_by: user.user.id,
-        },
-      ])
+      const normalizedSubtasks = normalizeSubtasks(subtasks)
+      const basePayload = {
+        event_id: eventId,
+        title: formData.title,
+        priority: formData.priority,
+        status: formData.status,
+        due_date: formData.due_date || null,
+        assigned_to: formData.assigned_to || null,
+        created_by: user.user.id,
+        subtasks: serializeSubtasksForDb(normalizedSubtasks),
+      }
 
+      const { error: insertError } = await supabase.from('tasks').insert([basePayload])
       if (insertError) throw insertError
 
       console.log('Task created successfully')
@@ -155,6 +170,52 @@ export default function AddTaskForm({ eventId, onClose, onTaskAdded, profiles = 
                 ))}
               </div>
             </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 p-3 sm:p-4">
+            <label className="mb-2 block text-sm font-medium text-slate-700">Subtasks</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newSubtaskTitle}
+                onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    addSubtask()
+                  }
+                }}
+                placeholder="e.g., Draft event brief"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <button
+                type="button"
+                onClick={addSubtask}
+                className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100"
+              >
+                <Plus className="h-4 w-4" />
+                Add
+              </button>
+            </div>
+            {subtasks.length > 0 ? (
+              <ul className="mt-3 space-y-2">
+                {subtasks.map((subtask) => (
+                  <li key={subtask.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                    <span className="text-sm text-slate-700">{subtask.title}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeSubtask(subtask.id)}
+                      className="rounded p-1 text-rose-600 hover:bg-rose-50"
+                      aria-label={`Remove subtask ${subtask.title}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-xs text-slate-500">No subtasks yet.</p>
+            )}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
