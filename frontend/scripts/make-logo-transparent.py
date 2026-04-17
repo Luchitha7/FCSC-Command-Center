@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Remove solid background from the Command Center logo (edge-connected flood fill)."""
+"""Remove solid edge-connected backgrounds from PNGs (logo, favicon, login hero)."""
 from __future__ import annotations
 
 import sys
@@ -55,4 +55,6 @@ if __name__ == "__main__":
     else:
         remove_edge_background(f"{root}/src/assets/command-center-logo.png", f"{root}/src/assets/command-center-logo.png")
         remove_edge_background(f"{root}/public/favicon.png", f"{root}/public/favicon.png")
-        print("Updated src/assets/command-center-logo.png and public/favicon.png")
+        hero = f"{root}/src/assets/login-hero.png"
+        remove_edge_background(hero, hero)
+        print("Updated command-center-logo.png, favicon.png, and login-hero.png")
