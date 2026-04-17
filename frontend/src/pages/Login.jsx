@@ -49,7 +49,7 @@ export default function Login() {
                   <p className="mt-2 text-xs font-semibold tracking-[0.2em] text-slate-400">Executive Committee</p>
                   <h1 className="mt-6 text-xl font-semibold tracking-tight text-slate-900">Sign in</h1>
                   <p className="mt-1.5 text-sm text-slate-600">
-                    Use your FCSC account to open the Command Center.
+                    Use the account given to you by the Executive Committee to open the Command Center.
                   </p>
                 </div>
 
