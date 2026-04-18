@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import AddEventForm from '../components/event/AddEventForm'
 import EcShell from '../components/layout/EcShell'
@@ -120,7 +120,16 @@ export default function Events() {
                   </div>
                 </button>
 
-                <div className="mt-3 flex justify-end">
+                <div className="mt-3 flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/events/${event.id}?tab=members`)}
+                    className="inline-flex min-h-[36px] touch-manipulation items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-indigo-600 transition hover:bg-indigo-50"
+                    aria-label={`Add members to ${event.name}`}
+                  >
+                    <Users size={16} />
+                    Add Members
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleDeleteEvent(event)}

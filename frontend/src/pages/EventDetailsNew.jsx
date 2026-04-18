@@ -11,7 +11,9 @@ import { mergeTasksWithSubtasks } from '../lib/taskSubtasks'
 export default function EventDetails({ eventId: propEventId, onBack }) {
   const { id: paramEventId } = useParams()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('overview')
+  const searchParams = new URLSearchParams(window.location.search)
+  const tabFromUrl = searchParams.get('tab')
+  const [activeTab, setActiveTab] = useState(tabFromUrl || 'overview')
   const [eventData, setEventData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -28,8 +30,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
   const [currentUserId, setCurrentUserId] = useState(null)
   const [taskStatusSavingId, setTaskStatusSavingId] = useState(null)
   const [taskStatusError, setTaskStatusError] = useState(null)
-  const [memberRole, setMemberRole] = useState('Member')
-  const [selectedMemberId, setSelectedMemberId] = useState('')
+  const [memberName, setMemberName] = useState('')
   const [memberSubmitting, setMemberSubmitting] = useState(false)
   const [memberActionId, setMemberActionId] = useState(null)
   const [memberError, setMemberError] = useState(null)
@@ -83,12 +84,8 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
     async function loadExtras() {
       setExtrasLoading(true)
       try {
-        const [mRes, memRes, annRes] = await Promise.all([
+        const [mRes, annRes] = await Promise.all([
           supabase.from('milestones').select('*').eq('event_id', eventId).order('due_date', { ascending: true }),
-          supabase
-            .from('event_members')
-            .select('id, role, profile_id, user_id, profiles(id, full_name, avatar_url, email)')
-            .eq('event_id', eventId),
           supabase
             .from('announcements')
             .select('*')
@@ -101,57 +98,12 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
         if (!mRes.error && mRes.data) setMilestones(mRes.data)
         else setMilestones([])
 
-        if (!memRes.error && memRes.data?.length) {
-          setOrganizers(
-            memRes.data.map((row) => {
-              const p = row.profiles
-              return {
-                id: row.id,
-                profileId: p?.id || row.profile_id || row.user_id || null,
-                name: p?.full_name?.trim() || p?.email || 'Member',
-                role: row.role || 'Member',
-                avatar: p?.avatar_url || null,
-              }
-            }),
-          )
-        } else if (memRes.error) {
-          const raw = await supabase.from('event_members').select('*').eq('event_id', eventId)
-          const rows = raw.data || []
-          const ids = [...new Set(rows.map((r) => r.user_id || r.profile_id).filter(Boolean))]
-          let byId = {}
-          if (ids.length) {
-            const { data: profs } = await supabase
-              .from('profiles')
-              .select('id, full_name, avatar_url, email')
-              .in('id', ids)
-            byId = Object.fromEntries((profs || []).map((p) => [p.id, p]))
-          }
-          if (!cancelled) {
-            setOrganizers(
-              rows.map((r) => {
-                const uid = r.user_id || r.profile_id
-                const p = byId[uid]
-                return {
-                  id: r.id,
-                  profileId: uid || null,
-                  name: p?.full_name?.trim() || p?.email || 'Member',
-                  role: r.role || 'Member',
-                  avatar: p?.avatar_url || null,
-                }
-              }),
-            )
-          }
-        } else {
-          setOrganizers([])
-        }
-
         if (!annRes.error && annRes.data) setAnnouncementsList(annRes.data)
         else setAnnouncementsList([])
       } catch (e) {
         console.error('Event extras:', e)
         if (!cancelled) {
           setMilestones([])
-          setOrganizers([])
           setAnnouncementsList([])
         }
       } finally {
@@ -164,6 +116,37 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
       cancelled = true
     }
   }, [eventId])
+
+  // Load members from event_members column whenever eventData changes
+  useEffect(() => {
+    if (!eventData?.event_members) {
+      setOrganizers([])
+      return
+    }
+
+    try {
+      const membersList = typeof eventData.event_members === 'string' 
+        ? JSON.parse(eventData.event_members) 
+        : eventData.event_members
+      
+      if (Array.isArray(membersList)) {
+        setOrganizers(
+          membersList.map((name, idx) => ({
+            id: `member-${idx}`,
+            profileId: null,
+            name: name,
+            role: 'Member',
+            avatar: null,
+          }))
+        )
+      } else {
+        setOrganizers([])
+      }
+    } catch (e) {
+      console.error('Error parsing members:', e)
+      setOrganizers([])
+    }
+  }, [eventData?.event_members])
 
   const fetchEventData = async () => {
     try {
@@ -275,45 +258,51 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
 
   const addMemberToEvent = async (e) => {
     e.preventDefault()
-    if (!selectedMemberId) return
+    if (!memberName.trim()) return
 
     setMemberSubmitting(true)
     setMemberError(null)
     try {
-      const basePayload = { event_id: eventId, role: memberRole || 'Member' }
-      let insertError = null
-
-      const tryPayloads = [
-        { ...basePayload, profile_id: selectedMemberId },
-        { ...basePayload, user_id: selectedMemberId },
-      ]
-
-      for (const payload of tryPayloads) {
-        const { data, error: err } = await supabase
-          .from('event_members')
-          .insert(payload)
-          .select('id, role, profile_id, user_id')
-          .single()
-        if (!err) {
-          const profile = allProfiles.find((p) => p.id === selectedMemberId)
-          setOrganizers((prev) => [
-            ...prev,
-            {
-              id: data?.id || `new-${selectedMemberId}`,
-              profileId: selectedMemberId,
-              name: profile?.full_name?.trim() || profile?.email || 'Member',
-              role: memberRole || 'Member',
-              avatar: profile?.avatar_url || null,
-            },
-          ])
-          setSelectedMemberId('')
-          setMemberRole('Member')
-          return
+      // Get current members list
+      let currentMembers = []
+      if (eventData?.event_members) {
+        try {
+          currentMembers = typeof eventData.event_members === 'string'
+            ? JSON.parse(eventData.event_members)
+            : eventData.event_members
+        } catch (e) {
+          currentMembers = []
         }
-        insertError = err
       }
 
-      throw insertError || new Error('Could not add member')
+      // Add new member
+      const updatedMembers = [...currentMembers, memberName.trim()]
+
+      // Update events table
+      const { error: updateError } = await supabase
+        .from('events')
+        .update({ event_members: JSON.stringify(updatedMembers) })
+        .eq('id', eventId)
+
+      if (updateError) throw updateError
+
+      // Update local state
+      setEventData((prev) => ({
+        ...prev,
+        event_members: JSON.stringify(updatedMembers),
+      }))
+
+      setOrganizers((prev) => [
+        ...prev,
+        {
+          id: `member-${Date.now()}`,
+          profileId: null,
+          name: memberName.trim(),
+          role: 'Member',
+          avatar: null,
+        },
+      ])
+      setMemberName('')
     } catch (err) {
       setMemberError(err.message || 'Failed to add member')
     } finally {
@@ -322,6 +311,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
   }
 
   const updateMemberRole = async (member, nextRole) => {
+    // Roles are stored locally in organizers state only
     const normalizedRole = nextRole.trim()
     if (!member?.id || !normalizedRole || normalizedRole === member.role) return
 
@@ -330,20 +320,13 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
     setMemberError(null)
     setOrganizers((prev) => prev.map((item) => (item.id === member.id ? { ...item, role: normalizedRole } : item)))
 
-    const { error: updateError } = await supabase
-      .from('event_members')
-      .update({ role: normalizedRole })
-      .eq('id', member.id)
-
-    if (updateError) {
-      setOrganizers((prev) => prev.map((item) => (item.id === member.id ? { ...item, role: previousRole } : item)))
-      setMemberError(updateError.message || 'Failed to update member role')
-    }
+    // Note: Roles are not persisted to database in this implementation
+    // If you need to persist roles, add a separate 'event_members_roles' column
     setMemberActionId(null)
   }
 
   const removeMemberFromEvent = async (member) => {
-    if (!member?.id) return
+    if (!member?.id || !member?.name) return
     if (!window.confirm(`Remove ${member.name} from this event?`)) return
 
     const previousMembers = organizers
@@ -351,10 +334,38 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
     setMemberError(null)
     setOrganizers((prev) => prev.filter((item) => item.id !== member.id))
 
-    const { error: deleteError } = await supabase.from('event_members').delete().eq('id', member.id)
-    if (deleteError) {
+    try {
+      // Get current members list
+      let currentMembers = []
+      if (eventData?.event_members) {
+        try {
+          currentMembers = typeof eventData.event_members === 'string'
+            ? JSON.parse(eventData.event_members)
+            : eventData.event_members
+        } catch (e) {
+          currentMembers = []
+        }
+      }
+
+      // Remove the member
+      const updatedMembers = currentMembers.filter((m) => m !== member.name)
+
+      // Update events table
+      const { error: deleteError } = await supabase
+        .from('events')
+        .update({ event_members: JSON.stringify(updatedMembers) })
+        .eq('id', eventId)
+
+      if (deleteError) throw deleteError
+
+      // Update local state
+      setEventData((prev) => ({
+        ...prev,
+        event_members: JSON.stringify(updatedMembers),
+      }))
+    } catch (err) {
       setOrganizers(previousMembers)
-      setMemberError(deleteError.message || 'Failed to remove member')
+      setMemberError(err.message || 'Failed to remove member')
     }
     setMemberActionId(null)
   }
@@ -858,34 +869,24 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
                 <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Members</h2>
                 <form onSubmit={addMemberToEvent} className="mb-5 space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4">
                   {memberError && <p className="text-sm text-red-600">{memberError}</p>}
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <select
-                      value={selectedMemberId}
-                      onChange={(e) => setSelectedMemberId(e.target.value)}
-                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm sm:col-span-2"
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        value={memberName}
+                        onChange={(e) => setMemberName(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                        placeholder="Enter member name"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={memberSubmitting || !memberName.trim()}
+                      className="inline-flex touch-manipulation items-center justify-center rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60 w-full sm:w-auto"
                     >
-                      <option value="">Select member</option>
-                      {availableProfiles.map((profile) => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.full_name || profile.email || 'Unnamed user'}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="text"
-                      value={memberRole}
-                      onChange={(e) => setMemberRole(e.target.value)}
-                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                      placeholder="Role"
-                    />
+                      {memberSubmitting ? 'Adding...' : 'Add Member'}
+                    </button>
                   </div>
-                  <button
-                    type="submit"
-                    disabled={memberSubmitting || !selectedMemberId}
-                    className="inline-flex touch-manipulation items-center justify-center rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60"
-                  >
-                    {memberSubmitting ? 'Adding...' : 'Add Member'}
-                  </button>
                 </form>
                 {extrasLoading && <p className="text-gray-600">Loading…</p>}
                 {!extrasLoading && organizers.length === 0 && (
