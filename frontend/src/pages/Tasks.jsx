@@ -6,6 +6,7 @@ import EditTaskForm from '../components/task/EditTaskForm'
 import EcShell from '../components/layout/EcShell'
 import LogoutButton from '../components/LogoutButton'
 import { getNavItems } from '../hooks/useNavItems'
+import { mergeTasksWithSubtasks } from '../lib/taskSubtasks'
 
 export default function Tasks() {
   const [tasks, setTasks] = useState([])
@@ -13,6 +14,8 @@ export default function Tasks() {
   const [error, setError] = useState(null)
   const [selectedTask, setSelectedTask] = useState(null)
   const [events, setEvents] = useState({})
+  const [profilesById, setProfilesById] = useState({})
+  const [allProfiles, setAllProfiles] = useState([])
   const [allEvents, setAllEvents] = useState([])
   const [selectedEventId, setSelectedEventId] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
@@ -22,6 +25,7 @@ export default function Tasks() {
   useEffect(() => {
     fetchTasks()
     fetchAllEvents()
+    fetchAllProfiles()
   }, [])
 
   const fetchAllEvents = async () => {
@@ -48,7 +52,7 @@ export default function Tasks() {
 
       if (fetchError) throw fetchError
 
-      setTasks(data || [])
+      setTasks(mergeTasksWithSubtasks(data || []))
 
       // Fetch event names for display
       if (data && data.length > 0) {
@@ -69,6 +73,24 @@ export default function Tasks() {
       console.error('Error fetching tasks:', err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchAllProfiles = async () => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .order('full_name', { ascending: true })
+      if (fetchError) throw fetchError
+
+      const rows = data || []
+      setAllProfiles(rows)
+      setProfilesById(
+        Object.fromEntries(rows.map((profile) => [profile.id, profile.full_name || profile.email || 'Unknown'])),
+      )
+    } catch (err) {
+      console.error('Error fetching profiles:', err)
     }
   }
 
@@ -106,6 +128,18 @@ export default function Tasks() {
         return 'bg-gray-100 text-gray-700'
     }
   }
+
+  const subtaskSummary = (task) => {
+    const list = Array.isArray(task.subtasks) ? task.subtasks : []
+    if (!list.length) return 'No subtasks'
+    const doneCount = list.filter((item) => item.done === true).length
+    return `${doneCount}/${list.length} done`
+  }
+
+  const filteredTasks = selectedEventId
+    ? tasks.filter((task) => String(task.event_id) === String(selectedEventId))
+    : tasks
+  const selectedEventName = selectedEventId ? allEvents.find((event) => event.id === selectedEventId)?.name : ''
 
   return (
     <EcShell navItems={navItems} footer={footerContent}>
@@ -162,11 +196,15 @@ export default function Tasks() {
         {loading && <p className="text-gray-600">Loading tasks...</p>}
         {error && <p className="text-red-600">Error: {error}</p>}
 
-        {!loading && tasks.length === 0 && (
-          <p className="text-gray-600">No tasks found. Create one by opening an event!</p>
+        {!loading && filteredTasks.length === 0 && (
+          <p className="text-gray-600">
+            {selectedEventId
+              ? `No tasks found for ${selectedEventName || 'the selected event'}.`
+              : 'No tasks found. Create one by opening an event!'}
+          </p>
         )}
 
-        {!loading && tasks.length > 0 && (
+        {!loading && filteredTasks.length > 0 && (
           <div className="grid gap-4">
             <div className="-mx-1 overflow-x-auto rounded-lg border border-gray-200 sm:mx-0">
               <table className="w-full min-w-[720px]">
@@ -179,6 +217,9 @@ export default function Tasks() {
                       Event
                     </th>
                     <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-900 sm:px-6 sm:py-3 sm:text-sm">
+                      Assignee
+                    </th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-900 sm:px-6 sm:py-3 sm:text-sm">
                       Status
                     </th>
                     <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-900 sm:px-6 sm:py-3 sm:text-sm">
@@ -188,12 +229,15 @@ export default function Tasks() {
                       Due Date
                     </th>
                     <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-900 sm:px-6 sm:py-3 sm:text-sm">
+                      Subtasks
+                    </th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-900 sm:px-6 sm:py-3 sm:text-sm">
                       Action
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {tasks.map((task) => (
+                  {filteredTasks.map((task) => (
                     <tr
                       key={task.id}
                       className="cursor-pointer transition hover:bg-gray-50 touch-manipulation"
@@ -207,6 +251,9 @@ export default function Tasks() {
                       </td>
                       <td className="px-3 py-3 text-xs text-gray-600 sm:px-6 sm:py-4 sm:text-sm">
                         {events[task.event_id] || 'Unknown'}
+                      </td>
+                      <td className="px-3 py-3 text-xs text-gray-600 sm:px-6 sm:py-4 sm:text-sm">
+                        {task.assigned_to ? profilesById[task.assigned_to] || 'Unknown' : 'Unassigned'}
                       </td>
                       <td className="px-3 py-3 sm:px-6 sm:py-4">
                         <span
@@ -231,6 +278,9 @@ export default function Tasks() {
                           ? new Date(task.due_date).toLocaleDateString()
                           : '—'}
                       </td>
+                      <td className="px-3 py-3 text-xs text-gray-600 sm:px-6 sm:py-4 sm:text-sm">
+                        {subtaskSummary(task)}
+                      </td>
                       <td className="px-3 py-3 sm:px-6 sm:py-4">
                         <button
                           type="button"
@@ -254,6 +304,7 @@ export default function Tasks() {
         {showAddForm && selectedEventId && (
           <AddTaskForm
             eventId={selectedEventId}
+            profiles={allProfiles}
             onClose={() => {
               setShowAddForm(false)
               setSelectedEventId('')
@@ -269,6 +320,7 @@ export default function Tasks() {
         {selectedTask && (
           <EditTaskForm
             task={selectedTask}
+            profiles={allProfiles}
             onClose={() => setSelectedTask(null)}
             onTaskUpdated={() => {
               fetchTasks()

@@ -1,16 +1,19 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
-import { ChevronLeft, Calendar, MapPin, Users, CheckCircle, Clock, AlertCircle, Plus } from 'lucide-react'
+import { ChevronLeft, Calendar, MapPin, Users, CheckCircle, Clock, AlertCircle, Plus, Upload, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import EditEventForm from '../components/event/EditEventForm'
 import AddTaskForm from '../components/task/AddTaskForm'
 import EditTaskForm from '../components/task/EditTaskForm'
+import { mergeTasksWithSubtasks } from '../lib/taskSubtasks'
 
 export default function EventDetails({ eventId: propEventId, onBack }) {
   const { id: paramEventId } = useParams()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('overview')
+  const searchParams = new URLSearchParams(window.location.search)
+  const tabFromUrl = searchParams.get('tab')
+  const [activeTab, setActiveTab] = useState(tabFromUrl || 'overview')
   const [eventData, setEventData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -21,15 +24,54 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
 
   const [milestones, setMilestones] = useState([])
   const [organizers, setOrganizers] = useState([])
+  const [allProfiles, setAllProfiles] = useState([])
   const [announcementsList, setAnnouncementsList] = useState([])
+  const [filesList, setFilesList] = useState([])
+  const [currentUserId, setCurrentUserId] = useState(null)
+  const [taskStatusSavingId, setTaskStatusSavingId] = useState(null)
+  const [taskStatusError, setTaskStatusError] = useState(null)
+  const [memberName, setMemberName] = useState('')
+  const [memberSubmitting, setMemberSubmitting] = useState(false)
+  const [memberActionId, setMemberActionId] = useState(null)
+  const [memberError, setMemberError] = useState(null)
+  const [announcementTitle, setAnnouncementTitle] = useState('')
+  const [announcementBody, setAnnouncementBody] = useState('')
+  const [announcementSubmitting, setAnnouncementSubmitting] = useState(false)
+  const [announcementActionId, setAnnouncementActionId] = useState(null)
+  const [announcementEditingId, setAnnouncementEditingId] = useState(null)
+  const [announcementEditTitle, setAnnouncementEditTitle] = useState('')
+  const [announcementEditBody, setAnnouncementEditBody] = useState('')
+  const [announcementError, setAnnouncementError] = useState(null)
+  const [fileTitle, setFileTitle] = useState('')
+  const [fileUrl, setFileUrl] = useState('')
+  const [fileInput, setFileInput] = useState(null)
+  const [fileSubmitting, setFileSubmitting] = useState(false)
+  const [fileError, setFileError] = useState(null)
   const [extrasLoading, setExtrasLoading] = useState(true)
+  const [eventHeadPoint, setEventHeadPoint] = useState('')
+  const [eventHeadDraft, setEventHeadDraft] = useState('')
+  const [eventHeadSaving, setEventHeadSaving] = useState(false)
+  const [eventHeadError, setEventHeadError] = useState(null)
+  const memberRoleOptions = ['Member', 'Lead', 'Coordinator', 'Volunteer']
 
   const eventId = propEventId || paramEventId
+
+  useEffect(() => {
+    async function loadCurrentUser() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      setCurrentUserId(user?.id ?? null)
+    }
+    loadCurrentUser()
+  }, [])
 
   useEffect(() => {
     if (eventId) {
       fetchEventData()
       fetchEventTasks()
+      fetchProfiles()
+      fetchEventFiles()
     }
     // Only reload when navigating to another event
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -42,12 +84,8 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
     async function loadExtras() {
       setExtrasLoading(true)
       try {
-        const [mRes, memRes, annRes] = await Promise.all([
+        const [mRes, annRes] = await Promise.all([
           supabase.from('milestones').select('*').eq('event_id', eventId).order('due_date', { ascending: true }),
-          supabase
-            .from('event_members')
-            .select('id, role, profiles(full_name, avatar_url, email)')
-            .eq('event_id', eventId),
           supabase
             .from('announcements')
             .select('*')
@@ -60,55 +98,12 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
         if (!mRes.error && mRes.data) setMilestones(mRes.data)
         else setMilestones([])
 
-        if (!memRes.error && memRes.data?.length) {
-          setOrganizers(
-            memRes.data.map((row) => {
-              const p = row.profiles
-              return {
-                id: row.id,
-                name: p?.full_name?.trim() || p?.email || 'Member',
-                role: row.role || 'Member',
-                avatar: p?.avatar_url || null,
-              }
-            }),
-          )
-        } else if (memRes.error) {
-          const raw = await supabase.from('event_members').select('*').eq('event_id', eventId)
-          const rows = raw.data || []
-          const ids = [...new Set(rows.map((r) => r.user_id || r.profile_id).filter(Boolean))]
-          let byId = {}
-          if (ids.length) {
-            const { data: profs } = await supabase
-              .from('profiles')
-              .select('id, full_name, avatar_url, email')
-              .in('id', ids)
-            byId = Object.fromEntries((profs || []).map((p) => [p.id, p]))
-          }
-          if (!cancelled) {
-            setOrganizers(
-              rows.map((r) => {
-                const uid = r.user_id || r.profile_id
-                const p = byId[uid]
-                return {
-                  id: r.id,
-                  name: p?.full_name?.trim() || p?.email || 'Member',
-                  role: r.role || 'Member',
-                  avatar: p?.avatar_url || null,
-                }
-              }),
-            )
-          }
-        } else {
-          setOrganizers([])
-        }
-
         if (!annRes.error && annRes.data) setAnnouncementsList(annRes.data)
         else setAnnouncementsList([])
       } catch (e) {
         console.error('Event extras:', e)
         if (!cancelled) {
           setMilestones([])
-          setOrganizers([])
           setAnnouncementsList([])
         }
       } finally {
@@ -121,6 +116,37 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
       cancelled = true
     }
   }, [eventId])
+
+  // Load members from event_members column whenever eventData changes
+  useEffect(() => {
+    if (!eventData?.event_members) {
+      setOrganizers([])
+      return
+    }
+
+    try {
+      const membersList = typeof eventData.event_members === 'string' 
+        ? JSON.parse(eventData.event_members) 
+        : eventData.event_members
+      
+      if (Array.isArray(membersList)) {
+        setOrganizers(
+          membersList.map((name, idx) => ({
+            id: `member-${idx}`,
+            profileId: null,
+            name: name,
+            role: 'Member',
+            avatar: null,
+          }))
+        )
+      } else {
+        setOrganizers([])
+      }
+    } catch (e) {
+      console.error('Error parsing members:', e)
+      setOrganizers([])
+    }
+  }, [eventData?.event_members])
 
   const fetchEventData = async () => {
     try {
@@ -137,6 +163,27 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
     }
   }
 
+  useEffect(() => {
+    if (!eventId) return
+    const fromEvent =
+      eventData?.event_head_point ||
+      eventData?.head_point ||
+      eventData?.event_head ||
+      eventData?.point_of_contact ||
+      ''
+    if (fromEvent) {
+      setEventHeadPoint(fromEvent)
+      setEventHeadDraft(fromEvent)
+      return
+    }
+
+    if (typeof window !== 'undefined') {
+      const stored = window.localStorage.getItem(`fcsc_event_head_point_${eventId}`) || ''
+      setEventHeadPoint(stored)
+      setEventHeadDraft(stored)
+    }
+  }, [eventData, eventId])
+
   const fetchEventTasks = async () => {
     try {
       const { data, error: fetchError } = await supabase
@@ -146,9 +193,278 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
         .order('due_date', { ascending: true, nullsFirst: false })
 
       if (fetchError) throw fetchError
-      setTasks(data || [])
+      setTasks(mergeTasksWithSubtasks(data || []))
     } catch (err) {
       console.error('Error fetching tasks:', err)
+    }
+  }
+
+  const fetchProfiles = async () => {
+    const { data, error: fetchError } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, avatar_url')
+      .order('full_name', { ascending: true })
+
+    if (!fetchError) {
+      setAllProfiles(data || [])
+    }
+  }
+
+  const fetchEventFiles = async () => {
+    const tableCandidates = ['event_files', 'files', 'attachments']
+
+    for (const table of tableCandidates) {
+      const { data, error: fetchError } = await supabase
+        .from(table)
+        .select('*')
+        .eq('event_id', eventId)
+        .order('created_at', { ascending: false })
+
+      if (!fetchError) {
+        setFilesList(
+          (data || []).map((row, idx) => ({
+            id: row.id || `${table}-${idx}`,
+            name: row.name || row.file_name || row.filename || row.title || 'Untitled file',
+            url: row.url || row.file_url || row.public_url || null,
+            created_at: row.created_at || row.uploaded_at || row.updated_at || null,
+          })),
+        )
+        return
+      }
+    }
+
+    setFilesList([])
+  }
+
+  const toggleTaskDone = async (task, checked) => {
+    const nextStatus = checked ? 'Completed' : 'In Progress'
+    const previousStatus = task.status
+
+    setTaskStatusSavingId(task.id)
+    setTaskStatusError(null)
+    setTasks((prev) => prev.map((item) => (item.id === task.id ? { ...item, status: nextStatus } : item)))
+
+    const { error: updateError } = await supabase
+      .from('tasks')
+      .update({ status: nextStatus })
+      .eq('id', task.id)
+
+    if (updateError) {
+      setTasks((prev) => prev.map((item) => (item.id === task.id ? { ...item, status: previousStatus } : item)))
+      setTaskStatusError(updateError.message || 'Failed to update task status')
+    }
+    setTaskStatusSavingId(null)
+  }
+
+  const addMemberToEvent = async (e) => {
+    e.preventDefault()
+    if (!memberName.trim()) return
+
+    setMemberSubmitting(true)
+    setMemberError(null)
+    try {
+      // Get current members list
+      let currentMembers = []
+      if (eventData?.event_members) {
+        try {
+          currentMembers = typeof eventData.event_members === 'string'
+            ? JSON.parse(eventData.event_members)
+            : eventData.event_members
+        } catch (e) {
+          currentMembers = []
+        }
+      }
+
+      // Add new member
+      const updatedMembers = [...currentMembers, memberName.trim()]
+
+      // Update events table
+      const { error: updateError } = await supabase
+        .from('events')
+        .update({ event_members: JSON.stringify(updatedMembers) })
+        .eq('id', eventId)
+
+      if (updateError) throw updateError
+
+      // Update local state
+      setEventData((prev) => ({
+        ...prev,
+        event_members: JSON.stringify(updatedMembers),
+      }))
+
+      setOrganizers((prev) => [
+        ...prev,
+        {
+          id: `member-${Date.now()}`,
+          profileId: null,
+          name: memberName.trim(),
+          role: 'Member',
+          avatar: null,
+        },
+      ])
+      setMemberName('')
+    } catch (err) {
+      setMemberError(err.message || 'Failed to add member')
+    } finally {
+      setMemberSubmitting(false)
+    }
+  }
+
+  const updateMemberRole = async (member, nextRole) => {
+    // Roles are stored locally in organizers state only
+    const normalizedRole = nextRole.trim()
+    if (!member?.id || !normalizedRole || normalizedRole === member.role) return
+
+    const previousRole = member.role
+    setMemberActionId(member.id)
+    setMemberError(null)
+    setOrganizers((prev) => prev.map((item) => (item.id === member.id ? { ...item, role: normalizedRole } : item)))
+
+    // Note: Roles are not persisted to database in this implementation
+    // If you need to persist roles, add a separate 'event_members_roles' column
+    setMemberActionId(null)
+  }
+
+  const removeMemberFromEvent = async (member) => {
+    if (!member?.id || !member?.name) return
+    if (!window.confirm(`Remove ${member.name} from this event?`)) return
+
+    const previousMembers = organizers
+    setMemberActionId(member.id)
+    setMemberError(null)
+    setOrganizers((prev) => prev.filter((item) => item.id !== member.id))
+
+    try {
+      // Get current members list
+      let currentMembers = []
+      if (eventData?.event_members) {
+        try {
+          currentMembers = typeof eventData.event_members === 'string'
+            ? JSON.parse(eventData.event_members)
+            : eventData.event_members
+        } catch (e) {
+          currentMembers = []
+        }
+      }
+
+      // Remove the member
+      const updatedMembers = currentMembers.filter((m) => m !== member.name)
+
+      // Update events table
+      const { error: deleteError } = await supabase
+        .from('events')
+        .update({ event_members: JSON.stringify(updatedMembers) })
+        .eq('id', eventId)
+
+      if (deleteError) throw deleteError
+
+      // Update local state
+      setEventData((prev) => ({
+        ...prev,
+        event_members: JSON.stringify(updatedMembers),
+      }))
+    } catch (err) {
+      setOrganizers(previousMembers)
+      setMemberError(err.message || 'Failed to remove member')
+    }
+    setMemberActionId(null)
+  }
+
+  const addAnnouncement = async (e) => {
+    e.preventDefault()
+    if (!announcementTitle.trim()) return
+
+    setAnnouncementSubmitting(true)
+    setAnnouncementError(null)
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      const authorId = user?.id || currentUserId
+      if (!authorId) {
+        throw new Error('You must be logged in to post announcements')
+      }
+
+      const payload = {
+        event_id: eventId,
+        title: announcementTitle.trim(),
+        body: announcementBody.trim(),
+        posted_by: authorId,
+      }
+
+      const { data, error: insertError } = await supabase.from('announcements').insert(payload).select('*').single()
+      if (insertError) throw insertError
+
+      setAnnouncementsList((prev) => [data, ...prev])
+      setAnnouncementTitle('')
+      setAnnouncementBody('')
+    } catch (err) {
+      setAnnouncementError(err.message || 'Failed to add announcement')
+    } finally {
+      setAnnouncementSubmitting(false)
+    }
+  }
+
+  const addFile = async (e) => {
+    e.preventDefault()
+    if (!fileInput && !fileUrl.trim()) return
+
+    setFileSubmitting(true)
+    setFileError(null)
+    try {
+      let resolvedUrl = fileUrl.trim()
+      const resolvedTitle = fileTitle.trim() || fileInput?.name || 'Event file'
+
+      if (fileInput) {
+        const storagePath = `${eventId}/${Date.now()}-${fileInput.name}`
+        const { error: uploadError } = await supabase.storage.from('event-files').upload(storagePath, fileInput)
+        if (uploadError) throw uploadError
+
+        const { data: publicData } = supabase.storage.from('event-files').getPublicUrl(storagePath)
+        resolvedUrl = publicData?.publicUrl || ''
+      }
+
+      const tableCandidates = ['event_files', 'files', 'attachments']
+      const payloads = [
+        { event_id: eventId, name: resolvedTitle, url: resolvedUrl },
+        { event_id: eventId, file_name: resolvedTitle, file_url: resolvedUrl },
+        { event_id: eventId, title: resolvedTitle, url: resolvedUrl },
+      ]
+
+      let inserted = false
+      let lastError = null
+
+      for (const table of tableCandidates) {
+        for (const payload of payloads) {
+          const { error: err } = await supabase.from(table).insert(payload)
+          if (!err) {
+            inserted = true
+            break
+          }
+          lastError = err
+        }
+        if (inserted) break
+      }
+
+      if (!inserted) throw lastError || new Error('Could not save file metadata')
+
+      setFilesList((prev) => [
+        {
+          id: `new-${Date.now()}`,
+          name: resolvedTitle,
+          url: resolvedUrl || null,
+          created_at: new Date().toISOString(),
+        },
+        ...prev,
+      ])
+
+      setFileTitle('')
+      setFileUrl('')
+      setFileInput(null)
+    } catch (err) {
+      setFileError(err.message || 'Failed to add file')
+    } finally {
+      setFileSubmitting(false)
     }
   }
 
@@ -202,35 +518,153 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
       : extrasLoading
         ? '…'
         : 'No members yet'
+  const existingMemberIds = new Set(organizers.map((o) => o.profileId).filter(Boolean))
+  const availableProfiles = allProfiles.filter((profile) => !existingMemberIds.has(profile.id))
+  const assigneeNameById = Object.fromEntries(
+    allProfiles.map((profile) => [profile.id, profile.full_name || profile.email || 'Unknown']),
+  )
 
   const rsvpCount = eventData.rsvp_count ?? eventData.attendee_count
   const rsvpTarget = eventData.rsvp_target ?? eventData.expected_attendees ?? eventData.capacity
+  const eventHeadNameForPreview = eventHeadDraft.trim() || eventHeadPoint.trim()
+  const eventHeadInitials = eventHeadNameForPreview
+    ? eventHeadNameForPreview
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((part) => part[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+    : 'HP'
+  const canManageAnnouncements = (() => {
+    if (!currentUserId) return false
+    if (eventData?.created_by && eventData.created_by === currentUserId) return true
+    const myMembership = organizers.find((member) => member.profileId === currentUserId)
+    const elevatedRoles = new Set(['Lead', 'Coordinator', 'Organizer', 'Admin', 'Owner'])
+    return elevatedRoles.has(myMembership?.role || '')
+  })()
+
+  const beginAnnouncementEdit = (announcement) => {
+    setAnnouncementError(null)
+    setAnnouncementEditingId(announcement.id)
+    setAnnouncementEditTitle(announcement.title || '')
+    setAnnouncementEditBody(announcement.body ?? announcement.content ?? '')
+  }
+
+  const cancelAnnouncementEdit = () => {
+    setAnnouncementEditingId(null)
+    setAnnouncementEditTitle('')
+    setAnnouncementEditBody('')
+  }
+
+  const saveAnnouncementEdit = async (announcementId) => {
+    const nextTitle = announcementEditTitle.trim()
+    const nextBody = announcementEditBody.trim()
+    if (!nextTitle) {
+      setAnnouncementError('Announcement title is required')
+      return
+    }
+
+    setAnnouncementActionId(announcementId)
+    setAnnouncementError(null)
+    try {
+      const { data: updatedRecord, error: updateError } = await supabase
+        .from('announcements')
+        .update({ title: nextTitle, body: nextBody })
+        .eq('id', announcementId)
+        .select('*')
+        .single()
+
+      if (updateError) throw updateError
+
+      setAnnouncementsList((prev) => prev.map((a) => (a.id === announcementId ? updatedRecord : a)))
+      cancelAnnouncementEdit()
+    } catch (err) {
+      setAnnouncementError(err.message || 'Failed to update announcement')
+    } finally {
+      setAnnouncementActionId(null)
+    }
+  }
+
+  const deleteAnnouncement = async (announcement) => {
+    if (!announcement?.id) return
+    if (!window.confirm(`Delete "${announcement.title}"?`)) return
+
+    const previous = announcementsList
+    setAnnouncementActionId(announcement.id)
+    setAnnouncementError(null)
+    setAnnouncementsList((prevList) => prevList.filter((item) => item.id !== announcement.id))
+
+    const { error: deleteError } = await supabase.from('announcements').delete().eq('id', announcement.id)
+    if (deleteError) {
+      setAnnouncementsList(previous)
+      setAnnouncementError(deleteError.message || 'Failed to delete announcement')
+    }
+    if (announcementEditingId === announcement.id) cancelAnnouncementEdit()
+    setAnnouncementActionId(null)
+  }
+
+  const saveEventHeadPoint = async () => {
+    const nextName = eventHeadDraft.trim()
+    setEventHeadSaving(true)
+    setEventHeadError(null)
+    try {
+      const columnCandidates = ['event_head_point', 'head_point', 'event_head', 'point_of_contact']
+      let savedToDb = false
+      let lastError = null
+
+      for (const column of columnCandidates) {
+        const { error: updateError } = await supabase.from('events').update({ [column]: nextName || null }).eq('id', eventId)
+        if (!updateError) {
+          savedToDb = true
+          setEventData((prev) => (prev ? { ...prev, [column]: nextName || null } : prev))
+          break
+        }
+        lastError = updateError
+      }
+
+      // Fallback if DB schema does not yet include a dedicated column.
+      if (!savedToDb && typeof window !== 'undefined') {
+        window.localStorage.setItem(`fcsc_event_head_point_${eventId}`, nextName)
+      }
+
+      if (!savedToDb && lastError && typeof window === 'undefined') {
+        throw lastError
+      }
+
+      setEventHeadPoint(nextName)
+    } catch (err) {
+      setEventHeadError(err.message || 'Failed to save Event Head Point')
+    } finally {
+      setEventHeadSaving(false)
+    }
+  }
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-gray-50">
-      <div className="relative min-h-[14rem] bg-gradient-to-r from-purple-600 to-purple-800 pb-8 sm:h-64 sm:pb-0">
+    <div className="min-h-screen overflow-x-hidden bg-slate-100">
+      <div className="relative overflow-hidden bg-gradient-to-br from-indigo-700 via-violet-700 to-purple-800 pb-14">
         <button
           type="button"
           onClick={handleBack}
-          className="absolute left-3 top-3 z-10 flex touch-manipulation items-center gap-2 rounded-lg px-3 py-2 text-sm text-white transition hover:bg-white/20 sm:left-4 sm:top-4"
+          className="absolute left-3 top-3 z-10 flex touch-manipulation items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white backdrop-blur transition hover:bg-white/20 sm:left-6 sm:top-6"
         >
           <ChevronLeft size={20} />
           Back
         </button>
 
-        <div className="absolute inset-0 opacity-30">
-          <div className="absolute right-10 top-10 h-24 w-24 rounded-full bg-purple-500 blur-3xl sm:right-20 sm:h-32 sm:w-32"></div>
-          <div className="absolute bottom-6 left-4 h-28 w-28 rounded-full bg-purple-700 blur-3xl sm:bottom-10 sm:left-10 sm:h-40 sm:w-40"></div>
+        <div className="absolute inset-0 opacity-40">
+          <div className="absolute right-12 top-12 h-32 w-32 rounded-full bg-indigo-400 blur-3xl sm:right-28 sm:h-44 sm:w-44"></div>
+          <div className="absolute bottom-8 left-6 h-36 w-36 rounded-full bg-purple-500 blur-3xl sm:bottom-12 sm:left-16 sm:h-52 sm:w-52"></div>
         </div>
 
-        <div className="relative px-4 pb-6 pt-16 sm:px-6 sm:pt-24">
+        <div className="relative mx-auto max-w-7xl px-4 pb-6 pt-20 sm:px-6 sm:pt-24">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <div className="mb-3 flex flex-wrap gap-2 sm:mb-4">
-                <span className="inline-block rounded-full bg-purple-500 px-2.5 py-1 text-xs font-semibold text-white sm:px-3">
+                <span className="inline-block rounded-full border border-white/20 bg-white/15 px-2.5 py-1 text-xs font-semibold text-white sm:px-3">
                   {eventData.type}
                 </span>
-                <span className="inline-block rounded-full bg-green-500 px-2.5 py-1 text-xs font-semibold text-white sm:px-3">
+                <span className="inline-block rounded-full border border-emerald-200/30 bg-emerald-500/80 px-2.5 py-1 text-xs font-semibold text-white sm:px-3">
                   {eventData.status}
                 </span>
               </div>
@@ -255,7 +689,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
             <button
               type="button"
               onClick={() => setShowEditForm(true)}
-              className="w-full touch-manipulation rounded-lg bg-indigo-600 px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-indigo-700 sm:w-auto sm:self-start sm:px-6"
+              className="w-full touch-manipulation rounded-xl bg-white px-4 py-2.5 text-center text-sm font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-50 sm:w-auto sm:self-start sm:px-6"
             >
               Manage Event
             </button>
@@ -263,30 +697,30 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
-        <div className="mb-6 rounded-lg bg-white p-4 shadow-sm sm:mb-8 sm:p-6">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-gray-700">OVERALL READINESS</h3>
+      <div className="mx-auto -mt-7 max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        <div className="mb-6 rounded-2xl border border-indigo-100 bg-white p-4 shadow-lg shadow-indigo-100/40 sm:mb-8 sm:p-6">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Overall Readiness</h3>
             <span className="text-lg font-bold text-indigo-600">{readiness}%</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="h-2 w-full rounded-full bg-slate-200">
             <div
-              className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+              className="h-2 rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-300"
               style={{ width: `${readiness}%` }}
             ></div>
           </div>
         </div>
 
-        <div className="mb-8 border-b border-gray-200">
-          <div className="flex gap-8 overflow-x-auto">
+        <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+          <div className="flex gap-2 overflow-x-auto">
             {tabs.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`pb-4 px-1 capitalize font-medium text-sm transition-colors whitespace-nowrap ${
+                className={`rounded-xl px-3 py-2 capitalize text-sm font-semibold transition whitespace-nowrap sm:px-4 ${
                   activeTab === tab
-                    ? 'text-indigo-600 border-b-2 border-indigo-600'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-indigo-50 text-indigo-700'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
                 {tab}
@@ -299,14 +733,14 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
           <div className="space-y-6 sm:space-y-8 lg:col-span-2">
             {activeTab === 'overview' && (
               <>
-                <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                   <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Event Description</h2>
                   <p className="text-gray-600 leading-relaxed whitespace-pre-wrap">
                     {eventData.description || 'No description provided.'}
                   </p>
                 </div>
 
-                <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                   <h2 className="mb-4 text-lg font-semibold text-gray-900 sm:mb-6 sm:text-xl">Milestone Timeline</h2>
                   {extrasLoading && <p className="text-gray-600 text-sm">Loading milestones…</p>}
                   {!extrasLoading && milestones.length === 0 && (
@@ -344,7 +778,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
             )}
 
             {activeTab === 'tasks' && (
-              <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                 <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h2 className="text-lg font-semibold text-gray-900 sm:text-xl">Tasks</h2>
                   <button
@@ -361,17 +795,27 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
                   <p className="text-gray-600">No tasks yet. Create one to get started!</p>
                 ) : (
                   <div className="space-y-3">
+                    {taskStatusError && <p className="text-sm text-red-600">{taskStatusError}</p>}
                     {tasks.map((task) => (
                       <div
                         key={task.id}
                         onClick={() => setSelectedTask(task)}
-                        className="flex items-start gap-4 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition"
+                        className="cursor-pointer rounded-xl border border-slate-200 bg-slate-50/70 p-4 transition hover:border-indigo-200 hover:bg-indigo-50/40"
                       >
-                        <button type="button" onClick={() => setSelectedTask(task)} className="mt-1">
+                        <div className="mt-0.5 flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-emerald-600"
+                            checked={task.status === 'Completed'}
+                            disabled={taskStatusSavingId === task.id}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => toggleTaskDone(task, e.target.checked)}
+                            aria-label={`Mark ${task.title} as done`}
+                          />
                           {task.status === 'Completed' && <CheckCircle className="text-green-500" size={20} />}
                           {task.status === 'In Progress' && <Clock className="text-blue-500" size={20} />}
                           {task.status === 'Not Started' && <AlertCircle className="text-gray-400" size={20} />}
-                        </button>
+                        </div>
                         <div className="flex-1">
                           <h3 className="font-semibold text-gray-900">{task.title}</h3>
                           <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -402,6 +846,15 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
                                 Due: {new Date(task.due_date).toLocaleDateString()}
                               </span>
                             )}
+                            <span className="text-xs text-gray-600">
+                              Assignee: {task.assigned_to ? assigneeNameById[task.assigned_to] || 'Unknown' : 'Unassigned'}
+                            </span>
+                            {Array.isArray(task.subtasks) && task.subtasks.length > 0 && (
+                              <span className="text-xs text-gray-600">
+                                Subtasks: {task.subtasks.filter((item) => item.done === true).length}/{task.subtasks.length}{' '}
+                                done
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -412,8 +865,29 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
             )}
 
             {activeTab === 'members' && (
-              <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                 <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Members</h2>
+                <form onSubmit={addMemberToEvent} className="mb-5 space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4">
+                  {memberError && <p className="text-sm text-red-600">{memberError}</p>}
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        value={memberName}
+                        onChange={(e) => setMemberName(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                        placeholder="Enter member name"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={memberSubmitting || !memberName.trim()}
+                      className="inline-flex touch-manipulation items-center justify-center rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60 w-full sm:w-auto"
+                    >
+                      {memberSubmitting ? 'Adding...' : 'Add Member'}
+                    </button>
+                  </div>
+                </form>
                 {extrasLoading && <p className="text-gray-600">Loading…</p>}
                 {!extrasLoading && organizers.length === 0 && (
                   <p className="text-gray-600">No members assigned to this event yet.</p>
@@ -421,7 +895,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
                 {!extrasLoading && organizers.length > 0 && (
                   <ul className="divide-y divide-gray-200">
                     {organizers.map((o, i) => (
-                      <li key={i} className="flex items-center gap-3 py-3">
+                      <li key={o.id ?? i} className="flex items-start gap-3 py-3">
                         <div className="h-10 w-10 rounded-full bg-indigo-100 text-indigo-700 grid place-items-center text-sm font-semibold">
                           {o.name
                             .split(/\s+/)
@@ -431,9 +905,31 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
                             .slice(0, 2)
                             .toUpperCase()}
                         </div>
-                        <div>
+                        <div className="flex-1">
                           <p className="font-medium text-gray-900">{o.name}</p>
-                          <p className="text-xs text-gray-500 uppercase">{o.role}</p>
+                          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <select
+                              value={o.role || 'Member'}
+                              disabled={memberActionId === o.id}
+                              onChange={(e) => updateMemberRole(o, e.target.value)}
+                              className="rounded-lg border border-gray-300 px-2 py-1 text-xs text-gray-700"
+                            >
+                              {Array.from(new Set([o.role || 'Member', ...memberRoleOptions])).map((role) => (
+                                <option key={role} value={role}>
+                                  {role}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => removeMemberFromEvent(o)}
+                              disabled={memberActionId === o.id}
+                              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
+                            >
+                              <Trash2 size={12} />
+                              {memberActionId === o.id ? 'Working...' : 'Remove'}
+                            </button>
+                          </div>
                         </div>
                       </li>
                     ))}
@@ -443,15 +939,105 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
             )}
 
             {activeTab === 'files' && (
-              <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                 <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Files</h2>
-                <p className="text-gray-600">File attachments are not configured in this build.</p>
+                <form onSubmit={addFile} className="mb-5 space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4">
+                  {fileError && <p className="text-sm text-red-600">{fileError}</p>}
+                  <input
+                    type="text"
+                    value={fileTitle}
+                    onChange={(e) => setFileTitle(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    placeholder="File title (optional)"
+                  />
+                  <input
+                    type="url"
+                    value={fileUrl}
+                    onChange={(e) => setFileUrl(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    placeholder="Or paste file URL"
+                  />
+                  <input
+                    type="file"
+                    onChange={(e) => setFileInput(e.target.files?.[0] || null)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="submit"
+                    disabled={fileSubmitting || (!fileInput && !fileUrl.trim())}
+                    className="inline-flex touch-manipulation items-center justify-center gap-2 rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60"
+                  >
+                    <Upload size={16} />
+                    {fileSubmitting ? 'Adding file...' : 'Add File'}
+                  </button>
+                </form>
+
+                {filesList.length === 0 ? (
+                  <p className="text-gray-600">No files added yet.</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {filesList.map((file) => (
+                      <li key={file.id} className="rounded-xl border border-slate-200 p-3">
+                        <p className="font-medium text-gray-900">{file.name}</p>
+                        {file.url ? (
+                          <a
+                            href={file.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-1 inline-block break-all text-sm text-indigo-600 hover:text-indigo-700"
+                          >
+                            Open file
+                          </a>
+                        ) : (
+                          <p className="mt-1 text-sm text-gray-500">No public URL available</p>
+                        )}
+                        {file.created_at && (
+                          <p className="mt-1 text-xs text-gray-400">{new Date(file.created_at).toLocaleString()}</p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
 
             {activeTab === 'announcements' && (
-              <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
                 <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Announcements</h2>
+                {canManageAnnouncements ? (
+                  <form
+                    onSubmit={addAnnouncement}
+                    className="mb-5 space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4"
+                  >
+                    {announcementError && <p className="text-sm text-red-600">{announcementError}</p>}
+                    <input
+                      type="text"
+                      value={announcementTitle}
+                      onChange={(e) => setAnnouncementTitle(e.target.value)}
+                      placeholder="Announcement title"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                    <textarea
+                      value={announcementBody}
+                      onChange={(e) => setAnnouncementBody(e.target.value)}
+                      placeholder="What should everyone know?"
+                      rows={3}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                    <button
+                      type="submit"
+                      disabled={announcementSubmitting || !announcementTitle.trim()}
+                      className="inline-flex touch-manipulation items-center justify-center rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60"
+                    >
+                      {announcementSubmitting ? 'Posting...' : 'Post Announcement'}
+                    </button>
+                  </form>
+                ) : (
+                  <p className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+                    You can view announcements here. Posting and editing is limited to organizers.
+                  </p>
+                )}
+                {!canManageAnnouncements && announcementError && <p className="mb-4 text-sm text-red-600">{announcementError}</p>}
                 {extrasLoading && <p className="text-gray-600">Loading…</p>}
                 {!extrasLoading && announcementsList.length === 0 && (
                   <p className="text-gray-600">No announcements for this event.</p>
@@ -460,12 +1046,69 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
                   <ul className="space-y-4">
                     {announcementsList.map((a) => (
                       <li key={a.id} className="border-b border-gray-100 pb-4 last:border-0">
-                        <p className="font-semibold text-gray-900">{a.title}</p>
-                        <p className="text-sm text-gray-600 mt-1">{a.body ?? a.content}</p>
-                        {(a.created_at || a.published_at) && (
-                          <p className="text-xs text-gray-400 mt-2">
-                            {new Date(a.created_at || a.published_at).toLocaleString()}
-                          </p>
+                        {announcementEditingId === a.id ? (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={announcementEditTitle}
+                              onChange={(e) => setAnnouncementEditTitle(e.target.value)}
+                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                            />
+                            <textarea
+                              value={announcementEditBody}
+                              onChange={(e) => setAnnouncementEditBody(e.target.value)}
+                              rows={3}
+                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                            />
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => saveAnnouncementEdit(a.id)}
+                                disabled={announcementActionId === a.id || !announcementEditTitle.trim()}
+                                className="rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                              >
+                                {announcementActionId === a.id ? 'Saving...' : 'Save'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelAnnouncementEdit}
+                                disabled={announcementActionId === a.id}
+                                className="rounded border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="font-semibold text-gray-900">{a.title}</p>
+                            <p className="text-sm text-gray-600 mt-1">{a.body ?? a.content}</p>
+                            {(a.created_at || a.published_at) && (
+                              <p className="text-xs text-gray-400 mt-2">
+                                {new Date(a.created_at || a.published_at).toLocaleString()}
+                              </p>
+                            )}
+                          </>
+                        )}
+                        {canManageAnnouncements && announcementEditingId !== a.id && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => beginAnnouncementEdit(a)}
+                              disabled={announcementActionId === a.id}
+                              className="rounded border border-gray-300 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteAnnouncement(a)}
+                              disabled={announcementActionId === a.id}
+                              className="rounded px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                            >
+                              {announcementActionId === a.id ? 'Deleting...' : 'Delete'}
+                            </button>
+                          </div>
                         )}
                       </li>
                     ))}
@@ -476,45 +1119,59 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
           </div>
 
           <div className="space-y-6 lg:space-y-6">
-            <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
-              <h3 className="mb-3 text-base font-semibold text-gray-900 sm:mb-4 sm:text-lg">Organizers</h3>
-              {extrasLoading && <p className="text-gray-600 text-sm">Loading…</p>}
-              {!extrasLoading && organizers.length === 0 && (
-                <p className="text-gray-600 text-sm">No organizers listed.</p>
-              )}
-              {!extrasLoading && organizers.length > 0 && (
-                <div className="space-y-4">
-                  {organizers.map((organizer, idx) => (
-                    <div key={idx} className="flex items-center gap-3">
-                      {organizer.avatar ? (
-                        <img
-                          src={organizer.avatar}
-                          alt=""
-                          className="w-10 h-10 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 grid place-items-center text-xs font-bold">
-                          {organizer.name
-                            .split(/\s+/)
-                            .filter(Boolean)
-                            .map((p) => p[0])
-                            .join('')
-                            .slice(0, 2)
-                            .toUpperCase()}
-                        </div>
-                      )}
-                      <div>
-                        <p className="font-semibold text-sm text-gray-900">{organizer.name}</p>
-                        <p className="text-xs text-gray-600 uppercase">{organizer.role}</p>
-                      </div>
-                    </div>
-                  ))}
+            <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm">
+              <div className="bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-4 text-white sm:px-6">
+                <div className="flex items-center gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold sm:text-lg">Event Head Point</h3>
+                  </div>
                 </div>
+              </div>
+
+              <div className="space-y-4 p-4 sm:p-6">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Preview</p>
+                  <div className="mt-2 flex items-center gap-3">
+                    <div className="grid h-10 w-10 place-items-center rounded-full bg-violet-100 text-xs font-bold text-violet-700">
+                      {eventHeadInitials}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{eventHeadNameForPreview || 'No name set'}</p>
+                      <p className="text-xs text-slate-500">
+                        {eventHeadNameForPreview ? 'Head point selected' : 'Add one person as event lead'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+              {eventHeadError && (
+                <p className="mb-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  {eventHeadError}
+                </p>
               )}
+              <input
+                type="text"
+                value={eventHeadDraft}
+                onChange={(e) => setEventHeadDraft(e.target.value)}
+                placeholder="Type the responsible person's name"
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+              <button
+                type="button"
+                onClick={saveEventHeadPoint}
+                disabled={eventHeadSaving || eventHeadDraft.trim() === eventHeadPoint}
+                className="w-full rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:from-violet-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {eventHeadSaving ? 'Saving head point...' : 'Update Event Head Point'}
+              </button>
+              {eventHeadPoint && !eventHeadError && (
+                <p className="mt-2 text-xs text-slate-500">Current: {eventHeadPoint}</p>
+              )}
+              </div>
             </div>
 
             {(rsvpCount != null || rsvpTarget != null) && (
-              <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 p-6 rounded-lg shadow-sm text-white">
+              <div className="rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-700 p-6 text-white shadow-md shadow-indigo-200/50">
                 <h3 className="text-sm font-semibold mb-2 opacity-90">RSVP</h3>
                 <p className="text-4xl font-bold mb-1">{rsvpCount ?? '—'}</p>
                 {rsvpTarget != null && (
@@ -540,6 +1197,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
       {showAddTaskForm && (
         <AddTaskForm
           eventId={eventId}
+          profiles={allProfiles}
           onClose={() => setShowAddTaskForm(false)}
           onTaskAdded={() => {
             fetchEventTasks()
@@ -551,6 +1209,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
       {selectedTask && (
         <EditTaskForm
           task={selectedTask}
+          profiles={allProfiles}
           onClose={() => setSelectedTask(null)}
           onTaskUpdated={() => {
             fetchEventTasks()

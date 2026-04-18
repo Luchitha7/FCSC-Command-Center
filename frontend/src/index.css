@@ -1,1 +1,7 @@
 @import 'tailwindcss';
+
+@layer utilities {
+  .font-ui {
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+}

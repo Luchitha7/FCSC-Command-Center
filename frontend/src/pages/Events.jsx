@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Plus, Trash2, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import AddEventForm from '../components/event/AddEventForm'
 import EcShell from '../components/layout/EcShell'
@@ -12,6 +12,7 @@ export default function Events() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showForm, setShowForm] = useState(false)
+  const [deletingEventId, setDeletingEventId] = useState(null)
   const navigate = useNavigate()
   const navItems = getNavItems('events')
   const footerContent = <LogoutButton />
@@ -47,6 +48,27 @@ export default function Events() {
     navigate(`/events/${eventId}`)
   }
 
+  const handleDeleteEvent = async (event) => {
+    if (!window.confirm(`Delete "${event.name}"? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      setDeletingEventId(event.id)
+      setError(null)
+
+      const { error: deleteError } = await supabase.from('events').delete().eq('id', event.id)
+      if (deleteError) throw deleteError
+
+      setEvents((prevEvents) => prevEvents.filter((item) => item.id !== event.id))
+    } catch (err) {
+      setError(err.message || 'Failed to delete event')
+      console.error('Error deleting event:', err)
+    } finally {
+      setDeletingEventId(null)
+    }
+  }
+
   return (
     <EcShell navItems={navItems} footer={footerContent}>
       <div className="mx-auto max-w-4xl">
@@ -75,25 +97,51 @@ export default function Events() {
         {!loading && events.length > 0 && (
           <div className="space-y-3">
             {events.map((event) => (
-              <button
+              <div
                 key={event.id}
-                type="button"
-                onClick={() => handleEventClick(event.id)}
-                className="w-full cursor-pointer rounded-lg bg-white p-4 text-left shadow-sm transition hover:shadow-md touch-manipulation"
+                className="rounded-lg bg-white p-4 shadow-sm transition hover:shadow-md"
               >
-                <h3 className="break-words font-semibold text-gray-900">{event.name}</h3>
-                <p className="mt-1 break-words text-sm text-gray-600">
-                  {new Date(event.date).toLocaleDateString()} • {event.venue}
-                </p>
-                <div className="mt-2 flex gap-2">
-                  <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded">
-                    {event.type}
-                  </span>
-                  <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded">
-                    {event.status}
-                  </span>
+                <button
+                  type="button"
+                  onClick={() => handleEventClick(event.id)}
+                  className="w-full cursor-pointer touch-manipulation text-left"
+                >
+                  <h3 className="break-words font-semibold text-gray-900">{event.name}</h3>
+                  <p className="mt-1 break-words text-sm text-gray-600">
+                    {new Date(event.date).toLocaleDateString()} • {event.venue}
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <span className="rounded bg-purple-100 px-2 py-1 text-xs text-purple-700">
+                      {event.type}
+                    </span>
+                    <span className="rounded bg-green-100 px-2 py-1 text-xs text-green-700">
+                      {event.status}
+                    </span>
+                  </div>
+                </button>
+
+                <div className="mt-3 flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/events/${event.id}?tab=members`)}
+                    className="inline-flex min-h-[36px] touch-manipulation items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-indigo-600 transition hover:bg-indigo-50"
+                    aria-label={`Add members to ${event.name}`}
+                  >
+                    <Users size={16} />
+                    Add Members
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteEvent(event)}
+                    disabled={deletingEventId === event.id}
+                    className="inline-flex min-h-[36px] touch-manipulation items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    aria-label={`Delete ${event.name}`}
+                  >
+                    <Trash2 size={16} />
+                    {deletingEventId === event.id ? 'Deleting...' : 'Delete'}
+                  </button>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         )}

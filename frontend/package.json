@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "load:static": "k6 run ../load-tests/static.js -e BASE_URL=${BASE_URL:-http://localhost:4173}",
+    "load:supabase": "k6 run ../load-tests/supabase-read.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.0",
