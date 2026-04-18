@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2, Users } from 'lucide-react'
+import { Plus, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import AddEventForm from '../components/event/AddEventForm'
 import EcShell from '../components/layout/EcShell'
@@ -12,7 +12,6 @@ export default function Events() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showForm, setShowForm] = useState(false)
-  const [deletingEventId, setDeletingEventId] = useState(null)
   const navigate = useNavigate()
   const navItems = getNavItems('events')
   const footerContent = <LogoutButton />
@@ -46,27 +45,6 @@ export default function Events() {
 
   const handleEventClick = (eventId) => {
     navigate(`/events/${eventId}`)
-  }
-
-  const handleDeleteEvent = async (event) => {
-    if (!window.confirm(`Delete "${event.name}"? This action cannot be undone.`)) {
-      return
-    }
-
-    try {
-      setDeletingEventId(event.id)
-      setError(null)
-
-      const { error: deleteError } = await supabase.from('events').delete().eq('id', event.id)
-      if (deleteError) throw deleteError
-
-      setEvents((prevEvents) => prevEvents.filter((item) => item.id !== event.id))
-    } catch (err) {
-      setError(err.message || 'Failed to delete event')
-      console.error('Error deleting event:', err)
-    } finally {
-      setDeletingEventId(null)
-    }
   }
 
   return (
@@ -120,7 +98,7 @@ export default function Events() {
                   </div>
                 </button>
 
-                <div className="mt-3 flex gap-2 justify-end">
+                <div className="mt-3 flex justify-end">
                   <button
                     type="button"
                     onClick={() => navigate(`/events/${event.id}?tab=members`)}
@@ -129,16 +107,6 @@ export default function Events() {
                   >
                     <Users size={16} />
                     Add Members
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteEvent(event)}
-                    disabled={deletingEventId === event.id}
-                    className="inline-flex min-h-[36px] touch-manipulation items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    aria-label={`Delete ${event.name}`}
-                  >
-                    <Trash2 size={16} />
-                    {deletingEventId === event.id ? 'Deleting...' : 'Delete'}
                   </button>
                 </div>
               </div>
