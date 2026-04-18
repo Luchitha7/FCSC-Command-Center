@@ -88,20 +88,41 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
           supabase.from('milestones').select('*').eq('event_id', eventId).order('due_date', { ascending: true }),
           supabase
             .from('announcements')
-            .select('*')
+            .select('*, profiles:posted_by(id, full_name, email, avatar_url)')
             .eq('event_id', eventId)
             .order('created_at', { ascending: false }),
         ])
 
         if (cancelled) return
 
-        if (!mRes.error && mRes.data) setMilestones(mRes.data)
-        else setMilestones([])
+        if (!mRes.error && mRes.data) {
+          setMilestones(mRes.data)
+        } else {
+          setMilestones([])
+        }
 
-        if (!annRes.error && annRes.data) setAnnouncementsList(annRes.data)
-        else setAnnouncementsList([])
+        if (annRes.error) {
+          console.error('Error fetching announcements:', annRes.error)
+          // Try fetching without the profile join as fallback
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('announcements')
+            .select('*')
+            .eq('event_id', eventId)
+            .order('created_at', { ascending: false })
+          
+          if (fallbackError) {
+            console.error('Fallback announcement fetch failed:', fallbackError)
+            setAnnouncementsList([])
+          } else {
+            setAnnouncementsList(fallbackData || [])
+          }
+        } else if (annRes.data) {
+          setAnnouncementsList(annRes.data)
+        } else {
+          setAnnouncementsList([])
+        }
       } catch (e) {
-        console.error('Event extras:', e)
+        console.error('Event extras error:', e)
         if (!cancelled) {
           setMilestones([])
           setAnnouncementsList([])
@@ -207,6 +228,41 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
 
     if (!fetchError) {
       setAllProfiles(data || [])
+    }
+  }
+
+  const fetchAnnouncements = async () => {
+    try {
+      setExtrasLoading(true)
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*, profiles:posted_by(id, full_name, email, avatar_url)')
+        .eq('event_id', eventId)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Error fetching announcements:', error)
+        // Try without profile join
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('announcements')
+          .select('*')
+          .eq('event_id', eventId)
+          .order('created_at', { ascending: false })
+        
+        if (fallbackError) {
+          console.error('Fallback failed:', fallbackError)
+          setAnnouncementsList([])
+        } else {
+          setAnnouncementsList(fallbackData || [])
+        }
+      } else {
+        setAnnouncementsList(data || [])
+      }
+    } catch (err) {
+      console.error('Error in fetchAnnouncements:', err)
+      setAnnouncementsList([])
+    } finally {
+      setExtrasLoading(false)
     }
   }
 
@@ -392,10 +448,21 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
         posted_by: authorId,
       }
 
-      const { data, error: insertError } = await supabase.from('announcements').insert(payload).select('*').single()
+      const { error: insertError } = await supabase.from('announcements').insert(payload)
       if (insertError) throw insertError
 
-      setAnnouncementsList((prev) => [data, ...prev])
+      // Fetch the newly added announcement with profile data
+      const { data: newAnnouncements, error: fetchError } = await supabase
+        .from('announcements')
+        .select('*, profiles:posted_by(id, full_name, email, avatar_url)')
+        .eq('event_id', eventId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      
+      if (!fetchError && newAnnouncements && newAnnouncements.length > 0) {
+        setAnnouncementsList((prev) => [newAnnouncements[0], ...prev])
+      }
+
       setAnnouncementTitle('')
       setAnnouncementBody('')
     } catch (err) {
@@ -538,8 +605,14 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
     : 'HP'
   const canManageAnnouncements = (() => {
     if (!currentUserId) return false
+    // Check if user is the event creator
     if (eventData?.created_by && eventData.created_by === currentUserId) return true
-    const myMembership = organizers.find((member) => member.profileId === currentUserId)
+    // Check if user is in organizers with elevated role
+    // Match by profileId first, then by name if profileId is null
+    const myMembership = organizers.find((member) => 
+      member.profileId === currentUserId || 
+      (member.profileId === null && allProfiles.some(p => p.id === currentUserId && p.full_name === member.name))
+    )
     const elevatedRoles = new Set(['Lead', 'Coordinator', 'Organizer', 'Admin', 'Owner'])
     return elevatedRoles.has(myMembership?.role || '')
   })()
@@ -1003,116 +1076,175 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
 
             {activeTab === 'announcements' && (
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-                <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Announcements</h2>
+                <div className="mb-4 flex items-center justify-between sm:mb-6">
+                  <h2 className="text-lg font-semibold text-gray-900 sm:text-xl">📢 Announcements</h2>
+                  <button
+                    type="button"
+                    onClick={fetchAnnouncements}
+                    disabled={extrasLoading}
+                    className="rounded-lg px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 disabled:opacity-60 transition"
+                  >
+                    {extrasLoading ? '⟳ Refreshing...' : '⟳ Refresh'}
+                  </button>
+                </div>
+
                 {canManageAnnouncements ? (
                   <form
                     onSubmit={addAnnouncement}
-                    className="mb-5 space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4"
+                    className="mb-6 overflow-hidden rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-blue-50 p-4 shadow-sm sm:p-5"
                   >
-                    {announcementError && <p className="text-sm text-red-600">{announcementError}</p>}
-                    <input
-                      type="text"
-                      value={announcementTitle}
-                      onChange={(e) => setAnnouncementTitle(e.target.value)}
-                      placeholder="Announcement title"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                    />
-                    <textarea
-                      value={announcementBody}
-                      onChange={(e) => setAnnouncementBody(e.target.value)}
-                      placeholder="What should everyone know?"
-                      rows={3}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                    />
+                    {announcementError && (
+                      <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 border border-red-200">
+                        {announcementError}
+                      </div>
+                    )}
+                    <div className="mb-3">
+                      <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Title</label>
+                      <input
+                        type="text"
+                        value={announcementTitle}
+                        onChange={(e) => setAnnouncementTitle(e.target.value)}
+                        placeholder="e.g., Important Update, Schedule Change, etc."
+                        className="w-full rounded-lg border border-indigo-300 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                      />
+                    </div>
+                    <div className="mb-3">
+                      <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Message</label>
+                      <textarea
+                        value={announcementBody}
+                        onChange={(e) => setAnnouncementBody(e.target.value)}
+                        placeholder="Share important information with your team..."
+                        rows={3}
+                        className="w-full rounded-lg border border-indigo-300 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-500 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                      />
+                    </div>
                     <button
                       type="submit"
                       disabled={announcementSubmitting || !announcementTitle.trim()}
-                      className="inline-flex touch-manipulation items-center justify-center rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60"
+                      className="w-full touch-manipulation rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:from-indigo-700 hover:to-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      {announcementSubmitting ? 'Posting...' : 'Post Announcement'}
+                      {announcementSubmitting ? '⏳ Posting...' : '📤 Post Announcement'}
                     </button>
                   </form>
                 ) : (
-                  <p className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
-                    You can view announcements here. Posting and editing is limited to organizers.
-                  </p>
+                  <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    <p className="font-semibold mb-1">📝 Want to post announcements?</p>
+                    <p className="text-xs leading-relaxed">
+                      {eventData?.created_by === currentUserId 
+                        ? 'You created this event. Try refreshing the page to see posting options.'
+                        : 'Ask the event organizer to add you as a team member with Lead or Coordinator role.'}
+                    </p>
+                  </div>
                 )}
-                {!canManageAnnouncements && announcementError && <p className="mb-4 text-sm text-red-600">{announcementError}</p>}
-                {extrasLoading && <p className="text-gray-600">Loading…</p>}
+
+                {extrasLoading && (
+                  <div className="py-12 text-center">
+                    <p className="text-gray-500 text-sm">Loading announcements...</p>
+                  </div>
+                )}
+
                 {!extrasLoading && announcementsList.length === 0 && (
-                  <p className="text-gray-600">No announcements for this event.</p>
+                  <div className="py-12 text-center">
+                    <p className="text-gray-400 text-sm mb-2">📭 No announcements yet</p>
+                    <p className="text-gray-500 text-xs">{canManageAnnouncements ? 'Be the first to share an update!' : 'Check back soon for updates'}</p>
+                  </div>
                 )}
+
                 {!extrasLoading && announcementsList.length > 0 && (
-                  <ul className="space-y-4">
-                    {announcementsList.map((a) => (
-                      <li key={a.id} className="border-b border-gray-100 pb-4 last:border-0">
-                        {announcementEditingId === a.id ? (
-                          <div className="space-y-2">
-                            <input
-                              type="text"
-                              value={announcementEditTitle}
-                              onChange={(e) => setAnnouncementEditTitle(e.target.value)}
-                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                            />
-                            <textarea
-                              value={announcementEditBody}
-                              onChange={(e) => setAnnouncementEditBody(e.target.value)}
-                              rows={3}
-                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                            />
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => saveAnnouncementEdit(a.id)}
-                                disabled={announcementActionId === a.id || !announcementEditTitle.trim()}
-                                className="rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
-                              >
-                                {announcementActionId === a.id ? 'Saving...' : 'Save'}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={cancelAnnouncementEdit}
-                                disabled={announcementActionId === a.id}
-                                className="rounded border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-                              >
-                                Cancel
-                              </button>
+                  <div className="space-y-3">
+                    {announcementsList.map((a) => {
+                      const authorProfile = a.profiles
+                      const authorName = authorProfile?.full_name || authorProfile?.email || 'Anonymous'
+                      const authorInitials = authorName
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .map((p) => p[0])
+                        .join('')
+                        .slice(0, 2)
+                        .toUpperCase()
+                      
+                      return (
+                        <div key={a.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition">
+                          {announcementEditingId === a.id ? (
+                            <div className="p-4 sm:p-5 space-y-3 bg-slate-50">
+                              <input
+                                type="text"
+                                value={announcementEditTitle}
+                                onChange={(e) => setAnnouncementEditTitle(e.target.value)}
+                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold"
+                              />
+                              <textarea
+                                value={announcementEditBody}
+                                onChange={(e) => setAnnouncementEditBody(e.target.value)}
+                                rows={3}
+                                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                              />
+                              <div className="flex items-center gap-2 justify-end">
+                                <button
+                                  type="button"
+                                  onClick={cancelAnnouncementEdit}
+                                  disabled={announcementActionId === a.id}
+                                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => saveAnnouncementEdit(a.id)}
+                                  disabled={announcementActionId === a.id || !announcementEditTitle.trim()}
+                                  className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                                >
+                                  {announcementActionId === a.id ? 'Saving...' : 'Save'}
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        ) : (
-                          <>
-                            <p className="font-semibold text-gray-900">{a.title}</p>
-                            <p className="text-sm text-gray-600 mt-1">{a.body ?? a.content}</p>
-                            {(a.created_at || a.published_at) && (
-                              <p className="text-xs text-gray-400 mt-2">
-                                {new Date(a.created_at || a.published_at).toLocaleString()}
-                              </p>
-                            )}
-                          </>
-                        )}
-                        {canManageAnnouncements && announcementEditingId !== a.id && (
-                          <div className="mt-2 flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => beginAnnouncementEdit(a)}
-                              disabled={announcementActionId === a.id}
-                              className="rounded border border-gray-300 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => deleteAnnouncement(a)}
-                              disabled={announcementActionId === a.id}
-                              className="rounded px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
-                            >
-                              {announcementActionId === a.id ? 'Deleting...' : 'Delete'}
-                            </button>
-                          </div>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+                          ) : (
+                            <>
+                              <div className="border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-blue-50 px-4 py-3 sm:px-5">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className="h-10 w-10 rounded-full bg-indigo-200 text-indigo-700 grid place-items-center text-xs font-bold shrink-0">
+                                      {authorInitials}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="font-semibold text-gray-900 text-sm">{authorName}</p>
+                                      <p className="text-xs text-gray-500">
+                                        {a.created_at ? new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  {canManageAnnouncements && (
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => beginAnnouncementEdit(a)}
+                                        disabled={announcementActionId === a.id}
+                                        className="rounded px-2 py-1 text-xs font-semibold text-gray-600 hover:bg-white disabled:opacity-60 transition"
+                                      >
+                                        ✎
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => deleteAnnouncement(a)}
+                                        disabled={announcementActionId === a.id}
+                                        className="rounded px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-white disabled:opacity-60 transition"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="px-4 py-4 sm:px-5">
+                                <h3 className="text-base font-bold text-gray-900 mb-2">{a.title}</h3>
+                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{a.body ?? a.content}</p>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
                 )}
               </div>
             )}
