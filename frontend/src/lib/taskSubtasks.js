@@ -23,6 +23,7 @@ export function normalizeSubtasks(subtasks) {
         id: item?.id || `sub-${Date.now()}-${index}`,
         title,
         done: item?.done === true,
+        description: String(item?.description ?? '').trim(),
       }
     })
     .filter(Boolean)
