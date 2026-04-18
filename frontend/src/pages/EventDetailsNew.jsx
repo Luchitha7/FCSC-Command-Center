@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 import EditEventForm from '../components/event/EditEventForm'
 import AddTaskForm from '../components/task/AddTaskForm'
 import EditTaskForm from '../components/task/EditTaskForm'
-import { mergeTasksWithSubtasks } from '../lib/taskSubtasks'
+import { mergeTasksWithSubtasks, normalizeSubtasks, serializeSubtasksForDb } from '../lib/taskSubtasks'
 
 export default function EventDetails({ eventId: propEventId, onBack }) {
   const { id: paramEventId } = useParams()
@@ -29,6 +29,7 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
   const [filesList, setFilesList] = useState([])
   const [currentUserId, setCurrentUserId] = useState(null)
   const [taskStatusSavingId, setTaskStatusSavingId] = useState(null)
+  const [subtasksSavingTaskId, setSubtasksSavingTaskId] = useState(null)
   const [taskStatusError, setTaskStatusError] = useState(null)
   const [memberName, setMemberName] = useState('')
   const [memberSubmitting, setMemberSubmitting] = useState(false)
@@ -310,6 +311,29 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
       setTaskStatusError(updateError.message || 'Failed to update task status')
     }
     setTaskStatusSavingId(null)
+  }
+
+  const toggleSubtaskDoneInList = async (task, subtaskId) => {
+    const list = Array.isArray(task.subtasks) ? task.subtasks : []
+    const previous = normalizeSubtasks(list)
+    const next = previous.map((s) => (s.id === subtaskId ? { ...s, done: !s.done } : s))
+    const payload = serializeSubtasksForDb(next)
+
+    setSubtasksSavingTaskId(task.id)
+    setTaskStatusError(null)
+    setTasks((prev) =>
+      prev.map((item) => (item.id === task.id ? { ...item, subtasks: normalizeSubtasks(next) } : item)),
+    )
+
+    const { error: updateError } = await supabase.from('tasks').update({ subtasks: payload }).eq('id', task.id)
+
+    if (updateError) {
+      setTasks((prev) =>
+        prev.map((item) => (item.id === task.id ? { ...item, subtasks: previous } : item)),
+      )
+      setTaskStatusError(updateError.message || 'Failed to update subtasks')
+    }
+    setSubtasksSavingTaskId(null)
   }
 
   const addMemberToEvent = async (e) => {
@@ -869,69 +893,126 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
                 ) : (
                   <div className="space-y-3">
                     {taskStatusError && <p className="text-sm text-red-600">{taskStatusError}</p>}
-                    {tasks.map((task) => (
-                      <div
-                        key={task.id}
-                        onClick={() => setSelectedTask(task)}
-                        className="cursor-pointer rounded-xl border border-slate-200 bg-slate-50/70 p-4 transition hover:border-indigo-200 hover:bg-indigo-50/40"
-                      >
-                        <div className="mt-0.5 flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 accent-emerald-600"
-                            checked={task.status === 'Completed'}
-                            disabled={taskStatusSavingId === task.id}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => toggleTaskDone(task, e.target.checked)}
-                            aria-label={`Mark ${task.title} as done`}
-                          />
-                          {task.status === 'Completed' && <CheckCircle className="text-green-500" size={20} />}
-                          {task.status === 'In Progress' && <Clock className="text-blue-500" size={20} />}
-                          {task.status === 'Not Started' && <AlertCircle className="text-gray-400" size={20} />}
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900">{task.title}</h3>
-                          <div className="flex items-center gap-2 mt-2 flex-wrap">
-                            <span
-                              className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                                task.priority === 'High'
-                                  ? 'bg-red-100 text-red-700'
-                                  : task.priority === 'Medium'
-                                    ? 'bg-yellow-100 text-yellow-700'
-                                    : 'bg-green-100 text-green-700'
-                              }`}
-                            >
-                              {task.priority}
-                            </span>
-                            <span
-                              className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                                task.status === 'Completed'
-                                  ? 'bg-green-100 text-green-700'
-                                  : task.status === 'In Progress'
-                                    ? 'bg-blue-100 text-blue-700'
-                                    : 'bg-gray-100 text-gray-700'
-                              }`}
-                            >
-                              {task.status}
-                            </span>
-                            {task.due_date && (
-                              <span className="text-xs text-gray-600">
-                                Due: {new Date(task.due_date).toLocaleDateString()}
-                              </span>
-                            )}
-                            <span className="text-xs text-gray-600">
-                              Assignee: {task.assigned_to ? assigneeNameById[task.assigned_to] || 'Unknown' : 'Unassigned'}
-                            </span>
-                            {Array.isArray(task.subtasks) && task.subtasks.length > 0 && (
-                              <span className="text-xs text-gray-600">
-                                Subtasks: {task.subtasks.filter((item) => item.done === true).length}/{task.subtasks.length}{' '}
-                                done
-                              </span>
-                            )}
+                    {tasks.map((task) => {
+                      const subList = Array.isArray(task.subtasks) ? task.subtasks : []
+                      const previewLimit = 5
+                      const preview = subList.slice(0, previewLimit)
+                      const hiddenCount = Math.max(0, subList.length - preview.length)
+                      return (
+                        <div
+                          key={task.id}
+                          className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 transition hover:border-indigo-200 hover:bg-indigo-50/40"
+                        >
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setSelectedTask(task)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                setSelectedTask(task)
+                              }
+                            }}
+                            className="flex cursor-pointer gap-3 text-left"
+                          >
+                            <div className="flex shrink-0 items-start gap-2 pt-0.5">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 accent-emerald-600"
+                                checked={task.status === 'Completed'}
+                                disabled={taskStatusSavingId === task.id}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => toggleTaskDone(task, e.target.checked)}
+                                aria-label={`Mark ${task.title} as done`}
+                              />
+                              {task.status === 'Completed' && <CheckCircle className="text-green-500" size={20} />}
+                              {task.status === 'In Progress' && <Clock className="text-blue-500" size={20} />}
+                              {task.status === 'Not Started' && <AlertCircle className="text-gray-400" size={20} />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="font-semibold text-gray-900">{task.title}</h3>
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <span
+                                  className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                                    task.priority === 'High'
+                                      ? 'bg-red-100 text-red-700'
+                                      : task.priority === 'Medium'
+                                        ? 'bg-yellow-100 text-yellow-700'
+                                        : 'bg-green-100 text-green-700'
+                                  }`}
+                                >
+                                  {task.priority}
+                                </span>
+                                <span
+                                  className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                                    task.status === 'Completed'
+                                      ? 'bg-green-100 text-green-700'
+                                      : task.status === 'In Progress'
+                                        ? 'bg-blue-100 text-blue-700'
+                                        : 'bg-gray-100 text-gray-700'
+                                  }`}
+                                >
+                                  {task.status}
+                                </span>
+                                {task.due_date && (
+                                  <span className="text-xs text-gray-600">
+                                    Due: {new Date(task.due_date).toLocaleDateString()}
+                                  </span>
+                                )}
+                                <span className="text-xs text-gray-600">
+                                  Assignee:{' '}
+                                  {task.assigned_to ? assigneeNameById[task.assigned_to] || 'Unknown' : 'Unassigned'}
+                                </span>
+                                {subList.length > 0 && (
+                                  <span className="text-xs text-gray-600">
+                                    Subtasks: {subList.filter((item) => item.done === true).length}/{subList.length}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
+
+                          {subList.length > 0 && (
+                            <div className="mt-3 border-t border-slate-200/80 pt-3" onClick={(e) => e.stopPropagation()}>
+                              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                Subtasks
+                              </p>
+                              <ul className="space-y-2">
+                                {preview.map((st) => (
+                                  <li key={st.id} className="flex gap-2 text-sm">
+                                    <input
+                                      type="checkbox"
+                                      className="mt-0.5 h-4 w-4 shrink-0 accent-indigo-600"
+                                      checked={st.done === true}
+                                      disabled={subtasksSavingTaskId === task.id}
+                                      onChange={() => toggleSubtaskDoneInList(task, st.id)}
+                                      aria-label={`Toggle ${st.title}`}
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                      <span
+                                        className={`font-medium ${st.done ? 'text-slate-400 line-through' : 'text-slate-800'}`}
+                                      >
+                                        {st.title}
+                                      </span>
+                                      {st.description ? (
+                                        <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-slate-500">
+                                          {st.description}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                              {hiddenCount > 0 ? (
+                                <p className="mt-2 text-xs text-slate-500">
+                                  +{hiddenCount} more — click the task to edit
+                                </p>
+                              ) : null}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
