@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
-import { ChevronLeft, Calendar, MapPin, Users, CheckCircle, Clock, AlertCircle, Plus, Upload, Trash2 } from 'lucide-react'
+import { ChevronLeft, Calendar, MapPin, Users, CheckCircle, Clock, AlertCircle, Plus, Upload, Trash2, FileText, Download } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import EditEventForm from '../components/event/EditEventForm'
 import AddTaskForm from '../components/task/AddTaskForm'
@@ -507,6 +507,11 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
       const resolvedTitle = fileTitle.trim() || fileInput?.name || 'Event file'
 
       if (fileInput) {
+        // Validate PDF file
+        if (!fileInput.type.includes('pdf') && !fileInput.name.toLowerCase().endsWith('.pdf')) {
+          throw new Error('Only PDF files are allowed for upload. Use file URL to add other file types.')
+        }
+
         const storagePath = `${eventId}/${Date.now()}-${fileInput.name}`
         const { error: uploadError } = await supabase.storage.from('event-files').upload(storagePath, fileInput)
         if (uploadError) throw uploadError
@@ -556,6 +561,46 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
       setFileError(err.message || 'Failed to add file')
     } finally {
       setFileSubmitting(false)
+    }
+  }
+
+  const deleteFile = async (file) => {
+    if (!file?.id) return
+    if (!window.confirm(`Delete "${file.name}"?`)) return
+
+    try {
+      // Try to delete from all table candidates
+      const tableCandidates = ['event_files', 'files', 'attachments']
+      let deleted = false
+      
+      for (const table of tableCandidates) {
+        const { error: deleteError } = await supabase
+          .from(table)
+          .delete()
+          .eq('id', file.id)
+        
+        if (!deleteError) {
+          deleted = true
+          break
+        }
+      }
+
+      // Remove from storage if it's a Supabase URL
+      if (file.url && file.url.includes('supabase')) {
+        try {
+          const urlParts = file.url.split('/storage/v1/object/public/event-files/')
+          if (urlParts.length > 1) {
+            const storagePath = urlParts[1]
+            await supabase.storage.from('event-files').remove([storagePath])
+          }
+        } catch (err) {
+          console.error('Failed to delete from storage:', err)
+        }
+      }
+
+      setFilesList((prev) => prev.filter((item) => item.id !== file.id))
+    } catch (err) {
+      setFileError(err.message || 'Failed to delete file')
     }
   }
 
@@ -1094,63 +1139,99 @@ export default function EventDetails({ eventId: propEventId, onBack }) {
 
             {activeTab === 'files' && (
               <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-                <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Files</h2>
+                <h2 className="mb-3 text-lg font-semibold text-gray-900 sm:mb-4 sm:text-xl">Files & Documents</h2>
                 <form onSubmit={addFile} className="mb-5 space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4">
-                  {fileError && <p className="text-sm text-red-600">{fileError}</p>}
-                  <input
-                    type="text"
-                    value={fileTitle}
-                    onChange={(e) => setFileTitle(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                    placeholder="File title (optional)"
-                  />
-                  <input
-                    type="url"
-                    value={fileUrl}
-                    onChange={(e) => setFileUrl(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                    placeholder="Or paste file URL"
-                  />
-                  <input
-                    type="file"
-                    onChange={(e) => setFileInput(e.target.files?.[0] || null)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  />
+                  {fileError && <p className="text-sm text-red-600 bg-red-50 rounded p-2 border border-red-200">{fileError}</p>}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">File Title</label>
+                    <input
+                      type="text"
+                      value={fileTitle}
+                      onChange={(e) => setFileTitle(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="File title (optional)"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Upload PDF</label>
+                      <input
+                        type="file"
+                        accept=".pdf,application/pdf"
+                        onChange={(e) => setFileInput(e.target.files?.[0] || null)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm file:mr-2 file:rounded file:border-0 file:bg-indigo-100 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-indigo-700 hover:file:bg-indigo-200"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Max file size: 50MB</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Or Paste URL</label>
+                      <input
+                        type="url"
+                        value={fileUrl}
+                        onChange={(e) => setFileUrl(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="https://..."
+                      />
+                    </div>
+                  </div>
                   <button
                     type="submit"
                     disabled={fileSubmitting || (!fileInput && !fileUrl.trim())}
-                    className="inline-flex touch-manipulation items-center justify-center gap-2 rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60"
+                    className="inline-flex touch-manipulation items-center justify-center gap-2 rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60 w-full sm:w-auto"
                   >
                     <Upload size={16} />
-                    {fileSubmitting ? 'Adding file...' : 'Add File'}
+                    {fileSubmitting ? 'Uploading...' : 'Add File'}
                   </button>
                 </form>
 
                 {filesList.length === 0 ? (
-                  <p className="text-gray-600">No files added yet.</p>
+                  <div className="py-8 text-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50">
+                    <FileText size={32} className="mx-auto text-gray-400 mb-2" />
+                    <p className="text-gray-600 font-medium">No files added yet</p>
+                    <p className="text-gray-500 text-sm">Upload PDF documents to share with your team</p>
+                  </div>
                 ) : (
-                  <ul className="space-y-3">
-                    {filesList.map((file) => (
-                      <li key={file.id} className="rounded-xl border border-slate-200 p-3">
-                        <p className="font-medium text-gray-900">{file.name}</p>
-                        {file.url ? (
-                          <a
-                            href={file.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="mt-1 inline-block break-all text-sm text-indigo-600 hover:text-indigo-700"
+                  <div className="space-y-2">
+                    {filesList.map((file, idx) => {
+                      const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.url?.includes('.pdf')
+                      return (
+                        <div key={file.id} className="rounded-lg border border-slate-200 bg-white p-4 hover:shadow-md transition flex items-start gap-4">
+                          <div className="flex-shrink-0">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-100">
+                              <FileText size={20} className="text-indigo-600" />
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-gray-900 break-words text-sm sm:text-base">{file.name}</h3>
+                            {file.url ? (
+                              <a
+                                href={file.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-1 inline-flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                              >
+                                <Download size={14} />
+                                Download
+                              </a>
+                            ) : (
+                              <p className="mt-1 text-sm text-gray-500">No public URL available</p>
+                            )}
+                            {file.created_at && (
+                              <p className="mt-1 text-xs text-gray-400">Uploaded: {new Date(file.created_at).toLocaleDateString()}</p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => deleteFile(file)}
+                            className="flex-shrink-0 inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition"
                           >
-                            Open file
-                          </a>
-                        ) : (
-                          <p className="mt-1 text-sm text-gray-500">No public URL available</p>
-                        )}
-                        {file.created_at && (
-                          <p className="mt-1 text-xs text-gray-400">{new Date(file.created_at).toLocaleString()}</p>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+                            <Trash2 size={14} />
+                            Delete
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
                 )}
               </div>
             )}
