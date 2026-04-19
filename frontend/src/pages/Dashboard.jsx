@@ -192,6 +192,7 @@ export default function Dashboard() {
               id: t.id,
               title: t.title,
               event: nameById[t.event_id] || 'Event',
+              event_id: t.event_id,
               status: t.status,
               tone: taskStatusTone(t.status, t.due_date),
               due_date: t.due_date,
@@ -201,6 +202,7 @@ export default function Dashboard() {
               id: t.id,
               title: t.title,
               event: t.events?.name || 'Event',
+              event_id: t.event_id,
               status: t.status,
               tone: taskStatusTone(t.status, t.due_date),
               due_date: t.due_date,
@@ -300,15 +302,26 @@ export default function Dashboard() {
           </section>
 
           <section className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {statCards.map((stat) => (
-              <article key={stat.label} className="rounded-2xl border border-slate-200 bg-white p-5">
-                <p className={`text-xs font-bold uppercase tracking-[0.2em] ${stat.accent}`}>{stat.label}</p>
-                <p className="mt-5 text-4xl font-bold tracking-tight text-slate-900">
-                  {dashLoading ? '…' : stat.value}
-                </p>
-                <p className="mt-1 text-sm font-semibold uppercase tracking-[0.1em] text-slate-500">{stat.caption}</p>
-              </article>
-            ))}
+            {statCards.map((stat, idx) => {
+              const handleStatClick = () => {
+                if (idx === 0) navigate('/events')
+                else if (idx === 1) navigate('/members')
+                else if (idx === 2) navigate('/tasks')
+              }
+              return (
+                <article
+                  key={stat.label}
+                  onClick={handleStatClick}
+                  className="touch-manipulation cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 transition hover:shadow-md hover:border-indigo-300"
+                >
+                  <p className={`text-xs font-bold uppercase tracking-[0.2em] ${stat.accent}`}>{stat.label}</p>
+                  <p className="mt-5 text-4xl font-bold tracking-tight text-slate-900">
+                    {dashLoading ? '…' : stat.value}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold uppercase tracking-[0.1em] text-slate-500">{stat.caption}</p>
+                </article>
+              )
+            })}
           </section>
 
           <section className="mt-8 grid gap-5 xl:grid-cols-3">
@@ -332,7 +345,11 @@ export default function Dashboard() {
                 )}
                 {!dashLoading &&
                   upcomingEvents.map((event) => (
-                    <article key={event.id} className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                    <article
+                      key={event.id}
+                      onClick={() => navigate(`/events/${event.id}`)}
+                      className="touch-manipulation cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 transition hover:shadow-lg hover:border-indigo-300"
+                    >
                       <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.18em]">
                         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">{event.type}</span>
                         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-500">{event.status}</span>
@@ -370,16 +387,20 @@ export default function Dashboard() {
                   )}
                   {!dashLoading &&
                     pendingRows.map((task) => (
-                      <div key={task.id} className="flex items-start gap-3">
+                      <div
+                        key={task.id}
+                        onClick={() => navigate(`/events/${task.event_id}?tab=tasks`)}
+                        className="touch-manipulation cursor-pointer flex items-start gap-3 rounded-lg p-2 transition hover:bg-slate-50"
+                      >
                         <Circle className="mt-0.5 h-5 w-5 text-slate-400" />
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
-                            <p className="font-medium text-slate-900">{task.title}</p>
-                            <span className={`text-xs font-bold uppercase tracking-[0.14em] ${task.tone}`}>
+                            <p className="font-medium text-slate-900 truncate">{task.title}</p>
+                            <span className={`text-xs font-bold uppercase tracking-[0.14em] ${task.tone} shrink-0`}>
                               {task.status}
                             </span>
                           </div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{task.event}</p>
+                          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 truncate">{task.event}</p>
                         </div>
                       </div>
                     ))}
@@ -395,16 +416,19 @@ export default function Dashboard() {
                   )}
                   {!dashLoading &&
                     announcements.map((item, index) => (
-                      <div key={item.id ?? item.title} className="flex gap-3">
+                      <div
+                        key={item.id ?? item.title}
+                        className="touch-manipulation cursor-pointer flex gap-3 rounded-lg p-2 transition hover:bg-slate-50"
+                      >
                         {index === 0 ? (
                           <CircleDot className="mt-1 h-4 w-4 text-indigo-700" />
                         ) : (
                           <CheckCircle2 className="mt-1 h-4 w-4 text-fuchsia-700" />
                         )}
-                        <div>
+                        <div className="flex-1">
                           <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{item.time}</p>
                           <p className="mt-1 font-semibold text-slate-900">{item.title}</p>
-                          <p className="mt-1 text-sm text-slate-600">{item.details}</p>
+                          <p className="mt-1 text-sm text-slate-600 line-clamp-2">{item.details}</p>
                         </div>
                       </div>
                     ))}
